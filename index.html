@@ -1,0 +1,2648 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Cesium Click Picker + Three.js Water Lab v8 Natural Overtopping</title>
+
+  <link href="https://cdn.jsdelivr.net/npm/cesium@1.121.1/Build/Cesium/Widgets/widgets.css" rel="stylesheet" />
+  <script src="https://cdn.jsdelivr.net/npm/cesium@1.121.1/Build/Cesium/Cesium.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
+
+  <style>
+    :root {
+      --bg: #eef6f4;
+      --panel: rgba(15, 23, 42, .88);
+      --panel2: rgba(255, 255, 255, .72);
+      --line: rgba(15, 118, 110, .22);
+      --line2: rgba(15, 23, 42, .12);
+      --text: #eafdf8;
+      --muted: #8fb3aa;
+      --cyan: #22d3ee;
+      --mint: #34d399;
+      --yellow: #fbbf24;
+      --danger: #fb7185;
+      --ink: #0f172a;
+      --card: rgba(255,255,255,.82);
+      --accent: #14b8a6;
+      --accent2: #60a5fa;
+    }
+
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: var(--bg);
+      color: var(--text);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    button, input, select {
+      font: inherit;
+    }
+
+    .appShell {
+      position: fixed;
+      inset: 0;
+      display: grid;
+      grid-template-columns: minmax(280px, var(--left-pane, 46vw)) 10px minmax(360px, 1fr);
+      background:
+              radial-gradient(circle at 80% 6%, rgba(20,184,166,.20), transparent 28%),
+              radial-gradient(circle at 16% 86%, rgba(96,165,250,.13), transparent 32%),
+              #eef6f4;
+    }
+
+    .splitDivider {
+      position: relative;
+      z-index: 50;
+      cursor: col-resize;
+      background: linear-gradient(180deg, rgba(20,184,166,.18), rgba(15,23,42,.42), rgba(96,165,250,.18));
+      box-shadow: 0 0 22px rgba(15,23,42,.16);
+    }
+    .splitDivider::before {
+      content: "";
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      width: 4px;
+      height: 64px;
+      transform: translate(-50%, -50%);
+      border-radius: 999px;
+      background: rgba(255,255,255,.82);
+    }
+    body.resizing, body.resizing * {
+      cursor: col-resize !important;
+      user-select: none !important;
+    }
+
+    .pane {
+      position: relative;
+      min-width: 0;
+      min-height: 0;
+      overflow: hidden;
+    }
+
+    .pane.left {
+      background: #08131d;
+    }
+    .pane.left .topBar,
+    .panel.leftPanel {
+      display: block;
+    }
+
+    #cesiumContainer,
+    #threeContainer {
+      position: absolute;
+      inset: 0;
+    }
+    #threeContainer {
+      background:
+              radial-gradient(circle at 50% 20%, rgba(255,255,255,.45), transparent 30%),
+              linear-gradient(180deg, #dff2ed, #f8fbf3 58%, #d9eee2);
+    }
+
+    #threeContainer canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      touch-action: none;
+    }
+
+    .topBar {
+      position: absolute;
+      left: 14px;
+      right: 14px;
+      top: 14px;
+      z-index: 20;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      pointer-events: none;
+    }
+
+    .pill {
+      pointer-events: auto;
+      padding: 10px 13px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: rgba(4, 11, 18, .72);
+      backdrop-filter: blur(14px);
+      box-shadow: 0 14px 40px rgba(0,0,0,.26);
+      color: #dffbff;
+      font-size: 12px;
+      line-height: 1.35;
+    }
+
+    .brand {
+      display: grid;
+      gap: 2px;
+      min-width: 220px;
+    }
+
+    .brand strong {
+      font-size: 13px;
+      color: var(--mint);
+      letter-spacing: .02em;
+    }
+
+    .brand span {
+      font-size: 11px;
+      color: var(--muted);
+    }
+
+    .panel {
+      position: absolute;
+      z-index: 30;
+      width: min(390px, calc(100% - 28px));
+      max-height: calc(100% - 28px);
+      overflow: auto;
+      border: 1px solid var(--line);
+      border-radius: 22px;
+      background: linear-gradient(145deg, rgba(15,23,42,.92), rgba(19,32,47,.78));
+      backdrop-filter: blur(18px) saturate(135%);
+      box-shadow: 0 28px 90px rgba(0,0,0,.45);
+    }
+
+    .panel.leftPanel {
+      left: 14px;
+      bottom: 14px;
+    }
+
+    .panel.rightPanel {
+      left: 14px;
+      top: 72px;
+      width: min(330px, calc(100% - 28px));
+      background: linear-gradient(145deg, black);
+      color: #edfaff;
+      border-color: rgba(52,211,153,.34);
+      box-shadow: 0 22px 60px rgba(15,23,42,.36);
+    }
+    .panel.rightPanel .kicker { color: #7dd3fc; }
+    .panel.rightPanel h1,
+    .panel.rightPanel h2,
+    .panel.rightPanel label,
+    .panel.rightPanel .sectionTitle { color: #edfaff; }
+    .panel.rightPanel label span,
+    .panel.rightPanel .smallHint { color: #b7d4cf; }
+    .panel.rightPanel input,
+    .panel.rightPanel select {
+      background: rgba(255,255,255,.94);
+      color: #0f172a;
+      border-color: rgba(20,184,166,.28);
+    }
+    .panel.rightPanel .status {
+      background: rgba(8,20,30,.62);
+      color: #e9fffb;
+      border-color: rgba(52,211,153,.22);
+    }
+    .panel.rightPanel .tool,
+    .panel.rightPanel .btn {
+      background: rgba(248,250,252,.96);
+      color: #0f172a;
+      border-color: rgba(20,184,166,.28);
+      box-shadow: 0 10px 26px rgba(15,23,42,.16);
+    }
+    .panel.rightPanel .tool:hover,
+    .panel.rightPanel .btn:hover {
+      border-color: rgba(20,184,166,.72);
+      background: rgba(20,184,166,.12);
+    }
+    .panel.rightPanel .tool.active {
+      color: #001014;
+      background: linear-gradient(135deg, #14b8a6, #60a5fa);
+      border-color: transparent;
+      box-shadow: 0 14px 30px rgba(20,184,166,.26);
+    }
+
+    .panelHeader {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 10px;
+      padding: 16px 16px 11px;
+      border-bottom: 1px solid rgba(143,231,255,.12);
+    }
+
+    .kicker {
+      color: var(--mint);
+      font-size: 11px;
+      font-weight: 950;
+      letter-spacing: .14em;
+      text-transform: uppercase;
+      margin-bottom: 4px;
+    }
+
+    h1, h2 {
+      margin: 0;
+      line-height: 1.15;
+      letter-spacing: -.045em;
+    }
+
+    h1 { font-size: 18px; }
+    h2 { font-size: 15px; }
+
+    .panelBody {
+      padding: 13px 16px 16px;
+    }
+
+    .sectionTitle {
+      margin: 13px 0 7px;
+      color: #d6eff9;
+      font-size: 12px;
+      font-weight: 950;
+      letter-spacing: .04em;
+    }
+
+    .row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 9px;
+    }
+
+    .field {
+      display: grid;
+      gap: 6px;
+      margin-top: 9px;
+    }
+
+    label {
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      align-items: center;
+      color: #d2e8f5;
+      font-size: 12px;
+      font-weight: 820;
+    }
+
+    label span {
+      color: var(--muted);
+      font-weight: 600;
+    }
+
+    input[type="range"] {
+      height: 32px;
+      padding: 0;
+      background: transparent;
+      accent-color: var(--cyan);
+    }
+
+    input, select {
+      width: 100%;
+      border: 1px solid rgba(143,231,255,.18);
+      border-radius: 14px;
+      outline: none;
+      background: rgba(1, 7, 12, .62);
+      color: var(--text);
+      padding: 10px 11px;
+      font-size: 13px;
+    }
+
+    input:focus, select:focus {
+      border-color: rgba(82,231,255,.65);
+      box-shadow: 0 0 0 4px rgba(82,231,255,.12);
+    }
+
+    .buttonRow,
+    .toolGrid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+      margin-top: 10px;
+    }
+
+    .buttonRow.three {
+      display: none;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+
+    .toolGrid {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+
+    .smallHint {
+      margin-top: 8px;
+      color: var(--muted);
+      font-size: 11px;
+      line-height: 1.45;
+    }
+
+    .btn, .tool {
+      border: 1px solid var(--line2);
+      border-radius: 15px;
+      padding: 10px 11px;
+      cursor: pointer;
+      background: rgba(255,255,255,.075);
+      color: var(--text);
+      font-weight: 900;
+      font-size: 12px;
+      transition: transform .12s ease, border-color .12s ease, background .12s ease;
+    }
+
+    .btn:hover, .tool:hover {
+      transform: translateY(-1px);
+      border-color: rgba(82,231,255,.42);
+    }
+
+    .btn.primary {
+      border: 0;
+      background: linear-gradient(135deg, var(--cyan), var(--mint));
+      color: #001014;
+      box-shadow: 0 16px 36px rgba(82,231,255,.22);
+    }
+
+    .btn.warn {
+      color: #0e0b02;
+      border: 0;
+      background: linear-gradient(135deg, #ffd66e, #ffefb1);
+    }
+
+    .btn.danger {
+      color: white;
+      border-color: rgba(255,133,133,.32);
+      background: rgba(255, 80, 80, .16);
+    }
+
+    .tool.active {
+      border-color: rgba(20,184,166,.72);
+      background: rgba(20,184,166,.12);
+      box-shadow: inset 0 0 0 1px rgba(82,231,255,.08), 0 10px 30px rgba(82,231,255,.12);
+    }
+
+    .status {
+      margin-top: 11px;
+      min-height: 50px;
+      padding: 11px;
+      border: 1px solid rgba(143,231,255,.14);
+      border-radius: 18px;
+      background: rgba(1, 7, 12, .52);
+      color: #d9f4ff;
+      font-size: 12px;
+      line-height: 1.55;
+    }
+
+    .status strong { color: var(--mint); }
+    .status .warn { color: var(--yellow); }
+
+    .stats {
+      position: absolute;
+      right: 14px;
+      bottom: 14px;
+      z-index: 26;
+      display: grid;
+      grid-template-columns: repeat(5, minmax(86px, 1fr));
+      gap: 8px;
+      pointer-events: none;
+      width: min(600px, calc(100% - 28px));
+    }
+
+    .stat {
+      border: 1px solid rgba(143,231,255,.15);
+      border-radius: 17px;
+      background: rgba(4, 11, 18, .68);
+      backdrop-filter: blur(14px);
+      padding: 10px;
+      box-shadow: 0 16px 42px rgba(0,0,0,.24);
+    }
+
+    .stat .label {
+      margin-bottom: 5px;
+      color: var(--muted);
+      font-size: 10px;
+      font-weight: 950;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+    }
+
+    .stat .value {
+      font-size: 13px;
+      font-weight: 950;
+      font-variant-numeric: tabular-nums;
+      white-space: nowrap;
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .badge::before {
+      content: "";
+      width: 7px;
+      height: 7px;
+      border-radius: 999px;
+      background: var(--cyan);
+      box-shadow: 0 0 16px var(--cyan);
+    }
+
+    .crosshair {
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      width: 20px;
+      height: 20px;
+      margin-left: -10px;
+      margin-top: -10px;
+      z-index: 10;
+      pointer-events: none;
+      border: 1px solid rgba(82,231,255,.7);
+      border-radius: 999px;
+      box-shadow: 0 0 18px rgba(82,231,255,.4);
+    }
+
+    .crosshair::before,
+    .crosshair::after {
+      content: "";
+      position: absolute;
+      background: rgba(82,231,255,.65);
+    }
+
+    .crosshair::before { left: 9px; top: -8px; width: 1px; height: 36px; }
+    .crosshair::after { left: -8px; top: 9px; width: 36px; height: 1px; }
+
+    .splitHint {
+      display: none;
+      position: absolute;
+      right: 14px;
+      top: 72px;
+      z-index: 21;
+      width: min(310px, calc(100% - 28px));
+      padding: 12px 13px;
+      border: 1px solid var(--line);
+      border-radius: 20px;
+      background: rgba(4, 11, 18, .62);
+      backdrop-filter: blur(14px);
+      color: #cde1ed;
+      font-size: 12px;
+      line-height: 1.55;
+      pointer-events: none;
+    }
+
+    .loadingOverlay {
+      position: absolute;
+      inset: 0;
+      z-index: 80;
+      display: none;
+      place-items: center;
+      background: rgba(2, 7, 11, .58);
+      backdrop-filter: blur(6px);
+    }
+
+    .loadingOverlay.active {
+      display: grid;
+    }
+
+    .loadingCard {
+      width: min(360px, calc(100% - 42px));
+      padding: 18px;
+      border: 1px solid var(--line);
+      border-radius: 22px;
+      background: rgba(5, 14, 23, .92);
+      box-shadow: 0 24px 80px rgba(0,0,0,.42);
+      text-align: center;
+      color: #dffbff;
+      font-size: 13px;
+      line-height: 1.6;
+    }
+
+    .progressBar {
+      margin-top: 12px;
+      height: 8px;
+      border-radius: 999px;
+      background: rgba(255,255,255,.09);
+      overflow: hidden;
+    }
+
+    .progressBar > div {
+      width: 35%;
+      height: 100%;
+      border-radius: 999px;
+      background: linear-gradient(90deg, var(--cyan), var(--mint));
+      animation: slide 1.2s ease-in-out infinite alternate;
+    }
+
+    @keyframes slide {
+      from { transform: translateX(-30%); }
+      to { transform: translateX(210%); }
+    }
+
+    @media (max-width: 980px) {
+      .appShell {
+        grid-template-columns: 1fr;
+        grid-template-rows: 45vh 55vh;
+      }
+      .pane.left { border-right: 0; border-bottom: 1px solid rgba(143,231,255,.18); }
+      .panel.leftPanel, .panel.rightPanel {
+        width: min(360px, calc(100% - 28px));
+      }
+      .panel.rightPanel {
+        top: 58px;
+      }
+      .splitHint { display: none; }
+      .stats {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        width: min(370px, calc(100% - 28px));
+      }
+      .stat:nth-child(n+5) { display: none; }
+    }
+  </style>
+</head>
+
+<body>
+<div class="appShell">
+  <section class="pane left">
+    <div id="cesiumContainer"></div>
+
+    <div class="panel leftPanel">
+      <div class="panelHeader">
+        <div>
+          <h1>지형을 클릭해 주세요</h1>
+        </div>
+      </div>
+      <div class="panelBody" style="display: none;">
+        <div class="sectionTitle">영역</div>
+        <div class="row">
+          <div class="field">
+            <label for="areaKm">영역 크기 <span id="areaKmValue">8 km</span></label>
+            <input id="areaKm" type="range" min="2" max="24" step="0.5" value="8" />
+          </div>
+          <div class="field">
+            <label for="terrainScale">고도 강조 <span id="terrainScaleValue">1.25x</span></label>
+            <input id="terrainScale" type="range" min="0.4" max="3.0" step="0.05" value="1.45" />
+          </div>
+        </div>
+
+        <div class="row">
+          <div class="field">
+            <label for="sampleResolution">샘플 해상도</label>
+            <select id="sampleResolution">
+              <option value="96">96 x 96 빠름</option>
+              <option value="128">128 x 128 기본</option>
+              <option value="160" selected>160 x 160 세밀</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="terrainLevel">fallback level</label>
+            <select id="terrainLevel">
+              <option value="11">11 빠름</option>
+              <option value="13">13 기본</option>
+              <option value="15" selected>15 세밀</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="buttonRow">
+          <button id="flyKoreaBtn" class="btn" type="button">한라산 보기</button>
+          <button id="applyTerrainBtn" class="btn primary" type="button">오른쪽에 지형 적용</button>
+        </div>
+        <div class="smallHint">영역 선택은 지도 위를 직접 클릭해서 합니다. 클릭한 지점을 중심으로 선택 박스가 잡히고, 영역 크기를 바꾸면 박스도 같이 바뀝니다.</div>
+
+      </div>
+    </div>
+  </section>
+
+  <div id="splitDivider" class="splitDivider" title="드래그해서 지도와 시뮬레이션 영역 크기를 조절"></div>
+
+  <section class="pane right">
+    <div id="threeContainer"></div>
+
+
+    <div class="splitHint">
+      왼쪽에서 영역을 선택한 뒤 <b>오른쪽에 지형 적용</b>을 누르세요. 오른쪽에서는 기존처럼 물 소스·벽·월류 테스트를 바로 할 수 있습니다.
+    </div>
+
+    <div class="panel rightPanel">
+      <div class="panelHeader">
+        <button id="collapseSimPanelBtn" class="btn" type="button" style="display:block">접기</button>
+      </div>
+      <div id="simPanelBody" class="panelBody">
+        <div class="toolGrid">
+          <button class="tool" data-tool="source" type="button">물 사용</button>
+          <button class="tool" data-tool="wall" type="button">벽 그리기</button>
+          <button class="tool" data-tool="erase" type="button">지우기</button>
+        </div>
+
+        <div class="row">
+          <div class="field">
+            <label for="waterRate">유량 <span id="waterRateValue">0.42</span></label>
+            <input id="waterRate" type="range" min="0.05" max="1.6" step="0.01" value="0.42" />
+          </div>
+          <div class="field">
+            <label for="simSpeed">속도 <span id="simSpeedValue">3</span></label>
+            <input id="simSpeed" type="range" min="0" max="10" step="1" value="3" />
+          </div>
+        </div>
+
+        <div class="row">
+          <div class="field">
+            <label for="brushRadius">물/지우개 범위 <span id="brushRadiusValue">2</span></label>
+            <input id="brushRadius" type="range" min="1" max="8" step="1" value="2" />
+          </div>
+          <div class="field">
+            <label for="wallHeight">벽 높이/월류 <span id="wallHeightValue">7</span></label>
+            <input id="wallHeight" type="range" min="2" max="22" step="1" value="7" />
+          </div>
+        </div>
+
+        <div class="buttonRow three">
+          <button id="playBtn" class="btn primary" type="button">일시정지</button>
+          <button id="homeBtn" class="btn" type="button">원위치</button>
+          <button id="zoomInBtn" class="btn" type="button">확대</button>
+          <button id="zoomOutBtn" class="btn" type="button">축소</button>
+          <button id="clearWaterBtn" class="btn" type="button">물만 제거</button>
+          <button id="clearSourcesBtn" class="btn" type="button">소스 제거</button>
+          <button id="clearWallsBtn" class="btn danger" type="button">벽 제거</button>
+          <button id="resetHydroBtn" class="btn danger" type="button">물 초기화</button>
+          <button id="regenBtn" class="btn warn" type="button">기본 산 재생성</button>
+        </div>
+
+      </div>
+    </div>
+
+    <section class="stats">
+      <div class="stat" style="display: none;"><div class="label">Mode</div><div id="modeStat" class="value badge">running</div></div>
+      <div class="stat" style="display: none;"><div class="label">Water</div><div id="waterStat" class="value">0</div></div>
+      <div class="stat" style="display: none;"><div class="label">Max depth</div><div id="depthStat" class="value">0.00</div></div>
+      <div class="stat" style="display: none;"><div class="label">Sources</div><div id="sourceStat" class="value">0</div></div>
+      <div class="stat" style="display: none;"><div class="label">Walls</div><div id="wallStat" class="value">0</div></div>
+    </section>
+
+    <div id="loadingOverlay" class="loadingOverlay">
+      <div class="loadingCard">
+        <strong>Cesium 지형 데이터를 샘플링 중입니다.</strong><br />
+        선택 영역의 고도값을 받아 오른쪽 Three.js 지형으로 변환하고 있습니다.
+        <div class="progressBar"><div></div></div>
+      </div>
+    </div>
+  </section>
+</div>
+
+<script>
+  (function () {
+    "use strict";
+
+    /**********************************************************************
+     * 1) Cesium ion token
+     * - input에 token을 넣지 않고 자동 적용합니다.
+     * - 공개 배포 시에는 반드시 Cesium ion에서 도메인 제한/읽기 전용 권한을 설정하세요.
+     **********************************************************************/
+    const DEFAULT_CESIUM_TOKEN = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiI0NDVmZDE1OC1hYzlhLTQzYTMtOTgzNi1kOWQxN2Q2OTc3N2QiLCJpZCI6MjE2OTMyLCJpYXQiOjE3NjY0ODM1ODd9.mRp72jy1bvm4Zxie2rZv2wNHhQUBpaDup1dC2eQFd-0";
+
+    /**********************************************************************
+     * 2) 기본 상수
+     **********************************************************************/
+    const GRID = 160;
+    const SIZE = 210;
+    const CELL = SIZE / (GRID - 1);
+    const MAX_CELLS = GRID * GRID;
+    const MAX_WATER_DEPTH = 18;
+
+    const dirs = [
+      [1, 0, 1], [-1, 0, 1], [0, 1, 1], [0, -1, 1],
+      [1, 1, 0.72], [1, -1, 0.72], [-1, 1, 0.72], [-1, -1, 0.72],
+    ];
+
+    function $(id) { return document.getElementById(id); }
+    function idx(i, j) { return j * GRID + i; }
+    function clamp(v, a, b) { return Math.max(a, Math.min(b, v)); }
+    function lerp(a, b, t) { return a + (b - a) * t; }
+    function smoothstep(edge0, edge1, x) {
+      const t = clamp((x - edge0) / Math.max(1e-6, edge1 - edge0), 0, 1);
+      return t * t * (3 - 2 * t);
+    }
+    function gauss(x, y, cx, cy, sx, sy, amp) {
+      const dx = (x - cx) / sx;
+      const dy = (y - cy) / sy;
+      return amp * Math.exp(-(dx * dx + dy * dy));
+    }
+    function depthToVisual(depth) {
+      const d = Math.max(0, Number(depth) || 0);
+      return Math.min(6.8, Math.log1p(d) * 1.18 + Math.sqrt(d) * 0.22);
+    }
+
+    if (!window.THREE) {
+      document.body.innerHTML = '<div style="padding:24px;color:white;font-family:sans-serif">Three.js CDN 로딩 실패. 인터넷 연결 또는 CDN 차단을 확인하세요.</div>';
+      return;
+    }
+    if (!window.Cesium) {
+      document.body.innerHTML = '<div style="padding:24px;color:white;font-family:sans-serif">Cesium CDN 로딩 실패. 인터넷 연결 또는 CDN 차단을 확인하세요.</div>';
+      return;
+    }
+
+    /**********************************************************************
+     * 3) UI
+     **********************************************************************/
+    const ui = {
+      cesiumContainer: $("cesiumContainer"),
+      threeContainer: $("threeContainer"),
+      splitDivider: $("splitDivider"),
+
+      areaKm: $("areaKm"),
+      areaKmValue: $("areaKmValue"),
+      terrainScale: $("terrainScale"),
+      terrainScaleValue: $("terrainScaleValue"),
+      sampleResolution: $("sampleResolution"),
+      terrainLevel: $("terrainLevel"),
+      flyKoreaBtn: $("flyKoreaBtn"),
+      applyTerrainBtn: $("applyTerrainBtn"),
+      cesiumStatus: $("cesiumStatus"),
+
+      tools: Array.from(document.querySelectorAll(".tool")),
+      waterRate: $("waterRate"),
+      waterRateValue: $("waterRateValue"),
+      simSpeed: $("simSpeed"),
+      simSpeedValue: $("simSpeedValue"),
+      brushRadius: $("brushRadius"),
+      brushRadiusValue: $("brushRadiusValue"),
+      wallHeight: $("wallHeight"),
+      wallHeightValue: $("wallHeightValue"),
+      playBtn: $("playBtn"),
+      homeBtn: $("homeBtn"),
+      zoomInBtn: $("zoomInBtn"),
+      zoomOutBtn: $("zoomOutBtn"),
+      clearWaterBtn: $("clearWaterBtn"),
+      clearSourcesBtn: $("clearSourcesBtn"),
+      clearWallsBtn: $("clearWallsBtn"),
+      resetHydroBtn: $("resetHydroBtn"),
+      regenBtn: $("regenBtn"),
+      simStatus: $("simStatus"),
+      collapseSimPanelBtn: $("collapseSimPanelBtn"),
+      simPanelBody: $("simPanelBody"),
+
+      modeStat: $("modeStat"),
+      waterStat: $("waterStat"),
+      depthStat: $("depthStat"),
+      sourceStat: $("sourceStat"),
+      wallStat: $("wallStat"),
+      loadingOverlay: $("loadingOverlay"),
+    };
+
+    function setLoading(on) { ui.loadingOverlay.classList.toggle("active", !!on); }
+
+    /**********************************************************************
+     * 4) 시뮬레이션 데이터
+     **********************************************************************/
+    const terrain = new Float32Array(MAX_CELLS);
+    const naturalTerrain = new Float32Array(MAX_CELLS);
+    const water = new Float32Array(MAX_CELLS);
+    const delta = new Float32Array(MAX_CELLS);
+    const wall = new Uint8Array(MAX_CELLS);
+    // 벽이 물에 잠겼을 때 waterMesh가 벽 위를 덮도록 쓰는 시각용 수심입니다.
+    // 물리 흐름 계산에는 사용하지 않고 렌더링/토폴로지 판단에만 사용합니다.
+    const wallCover = new Float32Array(MAX_CELLS);
+    const spill = new Float32Array(MAX_CELLS);
+    const spillVX = new Float32Array(MAX_CELLS);
+    const spillVZ = new Float32Array(MAX_CELLS);
+    const overflowRibbons = [];
+
+    let sources = [];
+    let wallCount = 0;
+    let frameCount = 0;
+    let running = true;
+    let currentTool = null;
+    let isPointerDown = false;
+    let pointerMode = "none";
+    let lastPointer = { x: 0, y: 0 };
+    let lastWallCell = null;
+    let seed = Math.random() * 1000;
+    let currentTerrainMeta = { label: "procedural", min: 0, max: 38 };
+    let currentTerrainVisualMax = 42;
+
+    /**********************************************************************
+     * 5) Three.js 초기화
+     **********************************************************************/
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0xd6e6ec);
+    scene.fog = new THREE.Fog(0xd6e6ec, 230, 560);
+
+    const camera = new THREE.PerspectiveCamera(48, 1, 0.1, 1000);
+    const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    ui.threeContainer.appendChild(renderer.domElement);
+
+    const ambient = new THREE.HemisphereLight(0xffffff, 0x93a684, 1.38);
+    scene.add(ambient);
+
+    const sun = new THREE.DirectionalLight(0xffffff, 2.05);
+    sun.position.set(-65, 90, 42);
+    sun.castShadow = true;
+    sun.shadow.mapSize.set(1024, 1024);
+    scene.add(sun);
+
+    const fill = new THREE.DirectionalLight(0x99ddff, .62);
+    fill.position.set(60, 35, -80);
+    scene.add(fill);
+
+    const raycaster = new THREE.Raycaster();
+    const pointerNdc = new THREE.Vector2();
+    const tmpObj = new THREE.Object3D();
+
+    let terrainMesh, waterMesh, wallMesh, wallVisualGroup, spillMesh, contourLines, sourceMesh;
+    const wallVisualSegments = [];
+    const wallVisualJoints = new Map();
+    let terrainPositions, terrainColors, waterPositions, waterDepthAttr;
+    let cameraTarget = new THREE.Vector3(0, 14, 0);
+    let yaw = -0.65;
+    let pitch = 0.68;
+    let distance = 235;
+
+    function terrainHeightAtWorld(x, z) {
+      const i = clamp(Math.round((x / SIZE + .5) * (GRID - 1)), 0, GRID - 1);
+      const j = clamp(Math.round((z / SIZE + .5) * (GRID - 1)), 0, GRID - 1);
+      return terrain[idx(i, j)] || 0;
+    }
+
+    function keepCameraTargetOnTerrain() {
+      const edge = SIZE * .48;
+      cameraTarget.x = clamp(cameraTarget.x, -edge, edge);
+      cameraTarget.z = clamp(cameraTarget.z, -edge, edge);
+      cameraTarget.y = terrainHeightAtWorld(cameraTarget.x, cameraTarget.z) + 12;
+    }
+
+    function updateCamera() {
+      keepCameraTargetOnTerrain();
+      pitch = clamp(pitch, 0.20, 1.32);
+      distance = clamp(distance, 32, 460);
+      const cp = Math.cos(pitch);
+      camera.position.set(
+              cameraTarget.x + distance * cp * Math.sin(yaw),
+              cameraTarget.y + distance * Math.sin(pitch),
+              cameraTarget.z + distance * cp * Math.cos(yaw)
+      );
+      camera.lookAt(cameraTarget);
+    }
+
+    function resetCamera() {
+      cameraTarget.set(0, terrainHeightAtWorld(0, 0) + 12, 0);
+      yaw = -0.65;
+      pitch = 0.68;
+      distance = 235;
+      updateCamera();
+    }
+
+    function zoomCamera(factor) {
+      distance *= factor;
+      updateCamera();
+    }
+
+    function panCamera(dx, dy) {
+      const scale = distance * 0.0019;
+      const right = new THREE.Vector3().setFromMatrixColumn(camera.matrix, 0).normalize();
+      const forward = new THREE.Vector3();
+      camera.getWorldDirection(forward);
+      forward.y = 0;
+      if (forward.lengthSq() < 0.0001) forward.set(0, 0, -1);
+      forward.normalize();
+      cameraTarget.addScaledVector(right, -dx * scale);
+      cameraTarget.addScaledVector(forward, dy * scale);
+      updateCamera();
+    }
+
+    function resizeThree() {
+      const rect = ui.threeContainer.getBoundingClientRect();
+      const w = Math.max(1, rect.width);
+      const h = Math.max(1, rect.height);
+      renderer.setSize(w, h, false);
+      camera.aspect = w / h;
+      camera.updateProjectionMatrix();
+    }
+
+    /**********************************************************************
+     * 6) Terrain 생성/렌더링
+     **********************************************************************/
+    function terrainHeightFunction(i, j) {
+      const x = (i / (GRID - 1)) * 2 - 1;
+      const y = (j / (GRID - 1)) * 2 - 1;
+
+      const macroSlope = 32 * (1 - (x * 0.18 + y * 0.86));
+      const massif =
+              gauss(x, y, -0.62, -0.76, .38, .28, 34) +
+              gauss(x, y, -0.12, -0.56, .46, .34, 30) +
+              gauss(x, y, .48, -0.26, .48, .38, 23) +
+              gauss(x, y, .72, .34, .58, .52, 15);
+      const shoulders =
+              gauss(x, y, -.48, .10, .30, .26, 14) +
+              gauss(x, y, .34, .10, .30, .32, 12) +
+              gauss(x, y, .02, .50, .56, .28, 9);
+
+      const mainCenter = -0.06 + 0.30 * Math.sin((y + 1.05) * 2.55 + seed * .006) + 0.075 * Math.sin(y * 9.0 - seed * .012);
+      const mainDist = x - mainCenter;
+      const mainGorge = -38 * Math.exp(-(mainDist * mainDist) / 0.010) * (0.78 + 0.22 * Math.cos(y * 8.6));
+      const gorgeFloor = -9 * Math.exp(-(mainDist * mainDist) / 0.036);
+
+      const branchCenter = 0.44 - 0.42 * (y + .25) + 0.08 * Math.sin(y * 7.2 + seed * .01);
+      const branchDist = x - branchCenter;
+      const sideValley = -18 * Math.exp(-(branchDist * branchDist) / 0.014) * Math.exp(-((y - .05) * (y - .05)) / .55);
+
+      const erosionNoise =
+              2.2 * Math.sin((x * 13.8 + seed) * 1.15) * Math.cos((y * 10.8 - seed) * 1.08) +
+              1.25 * Math.sin(x * 34.0 + y * 19.0 + seed) +
+              .75 * Math.cos(x * 55.0 - y * 23.0 + seed * .3);
+
+      return macroSlope + massif + shoulders + mainGorge + gorgeFloor + sideValley + erosionNoise;
+    }
+
+    function normalizeTerrainToRange(targetMax) {
+      let min = Infinity, max = -Infinity;
+      for (let k = 0; k < MAX_CELLS; k++) {
+        min = Math.min(min, terrain[k]);
+        max = Math.max(max, terrain[k]);
+      }
+      const range = Math.max(1e-6, max - min);
+      for (let k = 0; k < MAX_CELLS; k++) {
+        const n = (terrain[k] - min) / range;
+        terrain[k] = Math.pow(n, 1.08) * targetMax;
+        naturalTerrain[k] = terrain[k];
+      }
+      currentTerrainVisualMax = targetMax;
+      currentTerrainMeta.min = min;
+      currentTerrainMeta.max = max;
+    }
+
+    function generateProceduralTerrain() {
+      seed = Math.random() * 1000;
+      for (let j = 0; j < GRID; j++) {
+        for (let i = 0; i < GRID; i++) terrain[idx(i, j)] = terrainHeightFunction(i, j);
+      }
+      normalizeTerrainToRange(38);
+      currentTerrainMeta = { label: "procedural", min: 0, max: 38 };
+    }
+
+    function applySampledTerrain(heights, label, exaggeration) {
+      let min = Infinity, max = -Infinity;
+      for (let k = 0; k < MAX_CELLS; k++) {
+        const h = Number.isFinite(heights[k]) ? heights[k] : 0;
+        min = Math.min(min, h);
+        max = Math.max(max, h);
+      }
+
+      const relief = Math.max(1, max - min);
+      const targetMax = clamp(relief * 0.10 * exaggeration, 18, 62);
+      for (let k = 0; k < MAX_CELLS; k++) {
+        const n = ((Number.isFinite(heights[k]) ? heights[k] : min) - min) / relief;
+        terrain[k] = Math.pow(clamp(n, 0, 1), 1.03) * targetMax;
+        naturalTerrain[k] = terrain[k];
+      }
+
+      currentTerrainVisualMax = targetMax;
+      currentTerrainMeta = { label, min, max };
+      resetHydroState();
+      rebuildSceneGeometry();
+      resetCamera();
+    }
+
+    function colorForHeight(h, slope) {
+      const maxH = Math.max(18, currentTerrainVisualMax || 42);
+      const t = clamp(h / maxH, 0, 1);
+
+      // v7: 높은 곳도 갈색/회색으로 죽이지 않고 초록 계열로 유지한다.
+      // 대신 명도와 채도 차이를 크게 줘서 능선과 골짜기가 분리되어 보이게 한다.
+      const valley = new THREE.Color(0x1f5f3d);
+      const forest = new THREE.Color(0x2f7f47);
+      const vividGrass = new THREE.Color(0x5da947);
+      const meadow = new THREE.Color(0x91c85f);
+      const highGreen = new THREE.Color(0xb7d879);
+      const paleMoss = new THREE.Color(0xd2df92);
+
+      const c = new THREE.Color();
+      if (t < .16) c.copy(valley).lerp(forest, t / .16);
+      else if (t < .38) c.copy(forest).lerp(vividGrass, (t - .16) / .22);
+      else if (t < .60) c.copy(vividGrass).lerp(meadow, (t - .38) / .22);
+      else if (t < .82) c.copy(meadow).lerp(highGreen, (t - .60) / .22);
+      else c.copy(highGreen).lerp(paleMoss, (t - .82) / .18);
+
+      // 지형을 읽기 쉽게 경사 음영과 고도 밴딩을 살짝 더한다.
+      const shade = clamp(1.18 - slope * .026, .50, 1.26);
+      const band = 0.965 + 0.035 * Math.sin(t * 42.0);
+      c.multiplyScalar(shade * band);
+
+      // 높은 고도는 청록을 아주 조금 섞어 산등성이가 뜨게 한다.
+      const high = smoothstep(.70, 1.0, t);
+      c.lerp(new THREE.Color(0xa8d98a), high * .16);
+      return c;
+    }
+
+    function slopeAt(i, j) {
+      const hx = terrain[idx(clamp(i + 1, 0, GRID - 1), j)] - terrain[idx(clamp(i - 1, 0, GRID - 1), j)];
+      const hy = terrain[idx(i, clamp(j + 1, 0, GRID - 1))] - terrain[idx(i, clamp(j - 1, 0, GRID - 1))];
+      return Math.sqrt(hx * hx + hy * hy);
+    }
+
+    function makeTopoTexture() {
+      const S = 512;
+      const canvas = document.createElement("canvas");
+      canvas.width = S;
+      canvas.height = S;
+      const ctx = canvas.getContext("2d");
+      const img = ctx.createImageData(S, S);
+
+      for (let y = 0; y < S; y++) {
+        for (let x = 0; x < S; x++) {
+          const i = Math.floor(x / (S - 1) * (GRID - 1));
+          const j = Math.floor(y / (S - 1) * (GRID - 1));
+          const h = terrain[idx(i, j)];
+          const s = slopeAt(i, j);
+          const c = colorForHeight(h, s);
+          const maxH = Math.max(18, currentTerrainVisualMax || 42);
+          const contourA = Math.abs((h % 4) - 2);
+          const contourB = Math.abs((h % 12) - 6);
+          const line = contourA > 1.78 ? .66 : (contourB > 5.68 ? .54 : 1.0);
+          const p = (y * S + x) * 4;
+
+          // 고도별 미세 노이즈로 실제 지형 texture처럼 색 변화를 준다.
+          const grain = 0.94 + 0.09 * Math.sin(x * 0.071 + y * 0.113) + 0.05 * Math.sin((x + y) * 0.037);
+          const ridge = smoothstep(.58, .96, clamp(h / maxH, 0, 1));
+          c.lerp(new THREE.Color(0x665c48), ridge * .08);
+          img.data[p] = Math.round(clamp(c.r * line * grain, 0, 1) * 255);
+          img.data[p + 1] = Math.round(clamp(c.g * line * grain, 0, 1) * 255);
+          img.data[p + 2] = Math.round(clamp(c.b * line * grain, 0, 1) * 255);
+          img.data[p + 3] = 255;
+        }
+      }
+
+      ctx.putImageData(img, 0, 0);
+      const tex = new THREE.CanvasTexture(canvas);
+      tex.wrapS = tex.wrapT = THREE.ClampToEdgeWrapping;
+      tex.colorSpace = THREE.SRGBColorSpace;
+      tex.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy());
+      return tex;
+    }
+
+    function disposeObject(obj) {
+      if (!obj) return;
+      scene.remove(obj);
+      obj.traverse?.((child) => {
+        if (child.geometry) child.geometry.dispose();
+        if (child.material) {
+          if (Array.isArray(child.material)) child.material.forEach(m => m.dispose());
+          else child.material.dispose();
+        }
+      });
+      if (obj.geometry) obj.geometry.dispose();
+      if (obj.material) obj.material.dispose();
+    }
+
+    function buildTerrainMesh() {
+      disposeObject(terrainMesh);
+
+      const positions = new Float32Array(MAX_CELLS * 3);
+      const colors = new Float32Array(MAX_CELLS * 3);
+      const uvs = new Float32Array(MAX_CELLS * 2);
+      const indices = [];
+
+      for (let j = 0; j < GRID; j++) {
+        for (let i = 0; i < GRID; i++) {
+          const k = idx(i, j);
+          const x = (i / (GRID - 1) - .5) * SIZE;
+          const z = (j / (GRID - 1) - .5) * SIZE;
+          const y = terrain[k];
+
+          positions[k * 3] = x;
+          positions[k * 3 + 1] = y;
+          positions[k * 3 + 2] = z;
+          uvs[k * 2] = i / (GRID - 1);
+          uvs[k * 2 + 1] = j / (GRID - 1);
+
+          const c = colorForHeight(y, slopeAt(i, j));
+          colors[k * 3] = c.r;
+          colors[k * 3 + 1] = c.g;
+          colors[k * 3 + 2] = c.b;
+        }
+      }
+
+      for (let j = 0; j < GRID - 1; j++) {
+        for (let i = 0; i < GRID - 1; i++) {
+          const a = idx(i, j), b = idx(i + 1, j), c = idx(i, j + 1), d = idx(i + 1, j + 1);
+          indices.push(a, c, b, b, c, d);
+        }
+      }
+
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute("position", new THREE.BufferAttribute(positions, 3));
+      geo.setAttribute("color", new THREE.BufferAttribute(colors, 3));
+      geo.setAttribute("uv", new THREE.BufferAttribute(uvs, 2));
+      geo.setIndex(indices);
+      geo.computeVertexNormals();
+
+      terrainPositions = positions;
+      terrainColors = colors;
+
+      const mat = new THREE.MeshStandardMaterial({
+        map: makeTopoTexture(),
+        vertexColors: true,
+        roughness: .86,
+        metalness: 0,
+        side: THREE.DoubleSide
+      });
+
+      terrainMesh = new THREE.Mesh(geo, mat);
+      terrainMesh.receiveShadow = true;
+      terrainMesh.name = "terrain";
+      scene.add(terrainMesh);
+    }
+
+    /**********************************************************************
+     * 7) 물/벽 mesh
+     **********************************************************************/
+    function wallVisualHeight() {
+      const wh = Number(ui.wallHeight.value) || 7;
+      return depthToVisual(wh) * .92;
+    }
+
+    function wallCrestVisualHeight(k) {
+      return terrain[k] + wallVisualHeight();
+    }
+
+    function wallCoverSurfaceHeight(k) {
+      return terrain[k] + depthToVisual(wallCover[k]) + .12;
+    }
+
+    function isWallSubmerged(k) {
+      if (!wall[k]) return false;
+      return wallCoverSurfaceHeight(k) >= wallCrestVisualHeight(k) - .08;
+    }
+
+    function canWaterSurfaceUseCell(k) {
+      // 벽이 없으면 기존처럼 수면 삼각형을 만든다.
+      if (!wall[k]) return true;
+      // 벽이어도 월류로 벽 상단보다 물이 높아진 경우에는
+      // waterMesh가 벽 위를 덮도록 삼각형에 포함한다.
+      return isWallSubmerged(k);
+    }
+
+    function makeWaterIndices() {
+      const indices = [];
+      for (let j = 0; j < GRID - 1; j++) {
+        for (let i = 0; i < GRID - 1; i++) {
+          const a = idx(i, j), b = idx(i + 1, j), c = idx(i, j + 1), d = idx(i + 1, j + 1);
+          if (canWaterSurfaceUseCell(a) && canWaterSurfaceUseCell(c) && canWaterSurfaceUseCell(b)) indices.push(a, c, b);
+          if (canWaterSurfaceUseCell(b) && canWaterSurfaceUseCell(c) && canWaterSurfaceUseCell(d)) indices.push(b, c, d);
+        }
+      }
+      return indices;
+    }
+
+    function refreshWaterTopology() {
+      if (!waterMesh) return;
+      waterMesh.geometry.setIndex(makeWaterIndices());
+      waterMesh.geometry.index.needsUpdate = true;
+      updateWaterGeometry();
+    }
+
+    let waterTopologyFrame = -999;
+    function refreshWaterTopologyBySubmergedWalls() {
+      if (!waterMesh) return;
+      if (frameCount - waterTopologyFrame < 6) return;
+      waterTopologyFrame = frameCount;
+      waterMesh.geometry.setIndex(makeWaterIndices());
+      waterMesh.geometry.index.needsUpdate = true;
+    }
+
+    function buildWaterMesh() {
+      disposeObject(waterMesh);
+
+      const positions = new Float32Array(MAX_CELLS * 3);
+      const uvs = new Float32Array(MAX_CELLS * 2);
+      const depths = new Float32Array(MAX_CELLS);
+
+      for (let j = 0; j < GRID; j++) {
+        for (let i = 0; i < GRID; i++) {
+          const k = idx(i, j);
+          const x = (i / (GRID - 1) - .5) * SIZE;
+          const z = (j / (GRID - 1) - .5) * SIZE;
+          const y = terrain[k] + .12;
+          positions[k * 3] = x;
+          positions[k * 3 + 1] = y;
+          positions[k * 3 + 2] = z;
+          uvs[k * 2] = i / (GRID - 1);
+          uvs[k * 2 + 1] = j / (GRID - 1);
+        }
+      }
+
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute("position", new THREE.BufferAttribute(positions, 3));
+      geo.setAttribute("uv", new THREE.BufferAttribute(uvs, 2));
+      geo.setAttribute("waterDepth", new THREE.BufferAttribute(depths, 1));
+      geo.setIndex(makeWaterIndices());
+      geo.computeVertexNormals();
+
+      waterPositions = positions;
+      waterDepthAttr = depths;
+
+      const mat = new THREE.ShaderMaterial({
+        uniforms: { uTime: { value: 0 } },
+        transparent: true,
+        depthWrite: false,
+        side: THREE.DoubleSide,
+        vertexShader: `
+            attribute float waterDepth;
+            varying float vDepth;
+            varying vec2 vUv;
+            varying vec3 vWorld;
+            void main() {
+              vDepth = waterDepth;
+              vUv = uv;
+              vec4 world = modelMatrix * vec4(position, 1.0);
+              vWorld = world.xyz;
+              gl_Position = projectionMatrix * viewMatrix * world;
+            }
+          `,
+        fragmentShader: `
+            uniform float uTime;
+            varying float vDepth;
+            varying vec2 vUv;
+            varying vec3 vWorld;
+            float hash(vec2 p){ p=fract(p*vec2(123.34,456.21)); p+=dot(p,p+45.32); return fract(p.x*p.y); }
+            float noise(vec2 p){
+              vec2 i=floor(p); vec2 f=fract(p);
+              float a=hash(i); float b=hash(i+vec2(1.,0.)); float c=hash(i+vec2(0.,1.)); float d=hash(i+vec2(1.,1.));
+              vec2 u=f*f*(3.-2.*f);
+              return mix(a,b,u.x)+(c-a)*u.y*(1.-u.x)+(d-b)*u.x*u.y;
+            }
+            float fbm(vec2 p){ float v=0.; float a=.5; for(int n=0;n<4;n++){ v+=a*noise(p); p*=2.03; a*=.52; } return v; }
+            void main(){
+              if (vDepth < 0.010) discard;
+              float d = clamp(vDepth * 0.20, 0.0, 1.0);
+              vec2 p = vUv * vec2(18.0, 18.0);
+              float flow = sin((vUv.y * 54.0 + vUv.x * 17.0) - uTime * 4.8 + fbm(p + uTime * .20) * 3.0) * .5 + .5;
+              float ripple = sin(vWorld.x * .72 + vWorld.z * .48 - uTime * 6.8) * .5 + .5;
+              float foam = smoothstep(.035, .26, vDepth) * (1.0 - smoothstep(.70, 1.75, vDepth));
+              foam *= smoothstep(.56, .96, flow * .70 + ripple * .22 + fbm(vUv * 38.0 - uTime * .72) * .32);
+              vec3 shallow = vec3(.17, .93, 1.0);
+              vec3 deep = vec3(.012, .17, .40);
+              vec3 glacial = vec3(.58, 1.0, .92);
+              vec3 col = mix(shallow, deep, d);
+              col = mix(col, glacial, flow * .20 * (1.0 - d));
+              col = mix(col, vec3(.96, 1.0, .95), clamp(foam, 0.0, 1.0));
+              col += vec3(.02, .14, .18) * (flow * .16 + ripple * .08);
+              float edge = smoothstep(.010, .080, vDepth);
+              float alpha = edge * clamp(.20 + d * .40 + foam * .30, .18, .74);
+              gl_FragColor = vec4(col, alpha);
+            }
+          `
+      });
+
+      waterMesh = new THREE.Mesh(geo, mat);
+      waterMesh.renderOrder = 3;
+      scene.add(waterMesh);
+    }
+
+    function buildContourLines() {
+      disposeObject(contourLines);
+
+      const positions = [];
+      const interval = 4;
+
+      function addSegment(i1, j1, i2, j2) {
+        const k1 = idx(i1, j1), k2 = idx(i2, j2);
+        positions.push((i1 / (GRID - 1) - .5) * SIZE, terrain[k1] + .09, (j1 / (GRID - 1) - .5) * SIZE);
+        positions.push((i2 / (GRID - 1) - .5) * SIZE, terrain[k2] + .09, (j2 / (GRID - 1) - .5) * SIZE);
+      }
+
+      for (let j = 0; j < GRID - 1; j++) {
+        for (let i = 0; i < GRID - 1; i++) {
+          const h = terrain[idx(i, j)];
+          const hx = terrain[idx(i + 1, j)];
+          const hy = terrain[idx(i, j + 1)];
+          if (Math.floor(h / interval) !== Math.floor(hx / interval)) addSegment(i, j, i + 1, j);
+          if (Math.floor(h / interval) !== Math.floor(hy / interval)) addSegment(i, j, i, j + 1);
+        }
+      }
+
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
+      const mat = new THREE.LineBasicMaterial({ color: 0x18402b, transparent: true, opacity: .26 });
+      contourLines = new THREE.LineSegments(geo, mat);
+      contourLines.renderOrder = 2;
+      scene.add(contourLines);
+    }
+
+    function makeWallVisualMaterial() {
+      return new THREE.MeshStandardMaterial({
+        color: 0x465866,
+        roughness: .88,
+        metalness: .02,
+        emissive: 0x05080c,
+        emissiveIntensity: .08,
+        transparent: false,
+        opacity: 1.0,
+        side: THREE.DoubleSide,
+        depthTest: true,
+        depthWrite: true
+      });
+    }
+
+    function makeWallTopMaterial() {
+      return new THREE.MeshStandardMaterial({
+        color: 0x607482,
+        roughness: .82,
+        metalness: .02,
+        emissive: 0x060b10,
+        emissiveIntensity: .06,
+        transparent: false,
+        opacity: 1.0,
+        side: THREE.DoubleSide,
+        depthTest: true,
+        depthWrite: true
+      });
+    }
+
+    function cellToWorld(i, j) {
+      const k = idx(i, j);
+      return {
+        k, i, j,
+        x: (i / (GRID - 1) - .5) * SIZE,
+        z: (j / (GRID - 1) - .5) * SIZE,
+        y: terrain[k]
+      };
+    }
+
+    function addWallVisualSegment(i0, j0, i1, j1) {
+      if (i0 < 1 || i0 >= GRID - 1 || j0 < 1 || j0 >= GRID - 1) return;
+      if (i1 < 1 || i1 >= GRID - 1 || j1 < 1 || j1 >= GRID - 1) return;
+      if (i0 === i1 && j0 === j1) {
+        wallVisualJoints.set(`${i0},${j0}`, { i: i0, j: j0 });
+        return;
+      }
+
+      const key = `${i0},${j0}-${i1},${j1}`;
+      const reverseKey = `${i1},${j1}-${i0},${j0}`;
+      if (wallVisualSegments.some(s => s.key === key || s.key === reverseKey)) return;
+
+      wallVisualSegments.push({ key, i0, j0, i1, j1 });
+      wallVisualJoints.set(`${i0},${j0}`, { i: i0, j: j0 });
+      wallVisualJoints.set(`${i1},${j1}`, { i: i1, j: j1 });
+    }
+
+    function rebuildWallVisualFromGrid() {
+      wallVisualSegments.length = 0;
+      wallVisualJoints.clear();
+
+      for (let j = 1; j < GRID - 1; j++) {
+        for (let i = 1; i < GRID - 1; i++) {
+          const k = idx(i, j);
+          if (!wall[k]) continue;
+
+          wallVisualJoints.set(`${i},${j}`, { i, j });
+
+          // 인접한 벽 셀을 선분으로 연결해서 셀 박스가 아니라 연속 벽처럼 보이게 만든다.
+          // 오른쪽/아래쪽/대각선만 검사하면 중복 선분을 피할 수 있다.
+          if (i + 1 < GRID - 1 && wall[idx(i + 1, j)]) addWallVisualSegment(i, j, i + 1, j);
+          if (j + 1 < GRID - 1 && wall[idx(i, j + 1)]) addWallVisualSegment(i, j, i, j + 1);
+          if (i + 1 < GRID - 1 && j + 1 < GRID - 1 && wall[idx(i + 1, j + 1)]) addWallVisualSegment(i, j, i + 1, j + 1);
+          if (i - 1 >= 1 && j + 1 < GRID - 1 && wall[idx(i - 1, j + 1)]) addWallVisualSegment(i, j, i - 1, j + 1);
+        }
+      }
+    }
+
+    function clearWallVisualGroupChildren() {
+      if (!wallVisualGroup) return;
+      while (wallVisualGroup.children.length) {
+        const child = wallVisualGroup.children.pop();
+        if (child.geometry) child.geometry.dispose();
+        if (child.material) {
+          if (Array.isArray(child.material)) child.material.forEach(m => m.dispose());
+          else child.material.dispose();
+        }
+      }
+    }
+
+    function buildWallMesh() {
+      disposeObject(wallMesh);
+      disposeObject(wallVisualGroup);
+      wallMesh = null;
+
+      wallVisualGroup = new THREE.Group();
+      wallVisualGroup.name = "continuous-wall";
+      wallVisualGroup.renderOrder = 2;
+      scene.add(wallVisualGroup);
+      updateWallMesh();
+    }
+
+    function updateWallMesh() {
+      if (!wallVisualGroup) return;
+
+      rebuildWallVisualFromGrid();
+      clearWallVisualGroupChildren();
+
+      const whVisual = wallVisualHeight();
+      const wallWidth = CELL * .82;
+      const wallMat = makeWallVisualMaterial();
+      const topMat = makeWallTopMaterial();
+      wallCount = 0;
+
+      // 1) 연속 선형 벽 본체
+      for (const seg of wallVisualSegments) {
+        const a = cellToWorld(seg.i0, seg.j0);
+        const b = cellToWorld(seg.i1, seg.j1);
+        const dx = b.x - a.x;
+        const dz = b.z - a.z;
+        const len = Math.hypot(dx, dz);
+        if (len < .001) continue;
+
+        // 물에 잠겨도 벽/건물 mesh 높이는 절대 줄이지 않는다.
+        // 침수 표현은 waterMesh가 벽 위로 올라와 덮는 방식으로만 처리한다.
+        const visibleWallHeight = whVisual;
+        const baseY = Math.max(a.y, b.y);
+        const mx = (a.x + b.x) * .5;
+        const mz = (a.z + b.z) * .5;
+        const angle = Math.atan2(dx, dz);
+
+        const geo = new THREE.BoxGeometry(len + wallWidth * .74, visibleWallHeight, wallWidth);
+        const mesh = new THREE.Mesh(geo, wallMat.clone());
+        mesh.position.set(mx, baseY + visibleWallHeight * .5 + .08, mz);
+        mesh.rotation.y = angle;
+        mesh.castShadow = true;
+        mesh.receiveShadow = true;
+        wallVisualGroup.add(mesh);
+
+        // 위쪽 얇은 cap을 추가해서 그냥 회색 박스가 아니라 제방/벽 상단처럼 보이게 한다.
+        // 물에 잠겨도 cap 자체는 줄이지 않는다. 물이 위에서 덮어 보이게 둔다.
+        if (visibleWallHeight > .25) {
+          const capH = Math.max(.10, Math.min(.24, visibleWallHeight * .07));
+          const capGeo = new THREE.BoxGeometry(len + wallWidth * .82, capH, wallWidth * 1.08);
+          const cap = new THREE.Mesh(capGeo, topMat.clone());
+          cap.position.set(mx, baseY + visibleWallHeight + capH * .5 + .10, mz);
+          cap.rotation.y = angle;
+          cap.castShadow = true;
+          cap.receiveShadow = true;
+          wallVisualGroup.add(cap);
+        }
+
+        wallCount++;
+      }
+
+      // 2) 선분이 하나도 없는 단독 셀 또는 꺾이는 연결부를 자연스럽게 메우는 조인트
+      for (const joint of wallVisualJoints.values()) {
+        const p = cellToWorld(joint.i, joint.j);
+        if (!wall[p.k]) continue;
+
+        // 조인트도 잠겼다고 줄이면 건물/벽이 작아지는 것처럼 보인다.
+        const visibleWallHeight = whVisual;
+
+        const jointRadius = wallWidth * .48;
+        const geo = new THREE.CylinderGeometry(jointRadius, jointRadius, visibleWallHeight, 14);
+        const mesh = new THREE.Mesh(geo, wallMat.clone());
+        mesh.position.set(p.x, p.y + visibleWallHeight * .5 + .09, p.z);
+        mesh.castShadow = true;
+        mesh.receiveShadow = true;
+        wallVisualGroup.add(mesh);
+      }
+    }
+
+    function buildSourceMesh() {
+      disposeObject(sourceMesh);
+      sourceMesh = new THREE.Group();
+      scene.add(sourceMesh);
+    }
+
+    function updateSourceMesh() {
+      if (!sourceMesh) return;
+      while (sourceMesh.children.length) {
+        const child = sourceMesh.children.pop();
+        child.geometry.dispose();
+        child.material.dispose();
+      }
+
+      //물 표시용 삼각뿔 표시안함
+      /*for (const src of sources) {
+        const x = (src.i / (GRID - 1) - .5) * SIZE;
+        const z = (src.j / (GRID - 1) - .5) * SIZE;
+        const y = terrain[idx(src.i, src.j)] + 3.0;
+        const geo = new THREE.ConeGeometry(1.25, 3.8, 18);
+        const mat = new THREE.MeshStandardMaterial({
+          color: 0x52e7ff,
+          emissive: 0x1fcfff,
+          emissiveIntensity: 1.2,
+          roughness: .3
+        });
+        const mesh = new THREE.Mesh(geo, mat);
+        mesh.position.set(x, y, z);
+        mesh.castShadow = true;
+        sourceMesh.add(mesh);
+      }*/
+    }
+
+    /**********************************************************************
+     * 8) 월류 ribbon mesh
+     **********************************************************************/
+    function buildSpillMesh() {
+      disposeObject(spillMesh);
+
+      const geo = new THREE.BufferGeometry();
+      const mat = new THREE.ShaderMaterial({
+        uniforms: { uTime: { value: 0 } },
+        transparent: true,
+        depthWrite: false,
+        side: THREE.DoubleSide,
+        vertexShader: `
+            attribute float flowT;
+            attribute float flowPower;
+            attribute float flowAcross;
+            varying float vFlowT;
+            varying float vPower;
+            varying float vAcross;
+            varying vec3 vWorld;
+            void main(){
+              vFlowT = flowT;
+              vPower = flowPower;
+              vAcross = flowAcross;
+              vec4 world = modelMatrix * vec4(position, 1.0);
+              vWorld = world.xyz;
+              gl_Position = projectionMatrix * viewMatrix * world;
+            }
+          `,
+        fragmentShader: `
+            uniform float uTime;
+            varying float vFlowT;
+            varying float vPower;
+            varying float vAcross;
+            varying vec3 vWorld;
+
+            float hash(vec2 p){
+              p = fract(p * vec2(127.1, 311.7));
+              p += dot(p, p + 19.19);
+              return fract(p.x * p.y);
+            }
+
+            float noise(vec2 p){
+              vec2 i = floor(p);
+              vec2 f = fract(p);
+              float a = hash(i);
+              float b = hash(i + vec2(1., 0.));
+              float c = hash(i + vec2(0., 1.));
+              float d = hash(i + vec2(1., 1.));
+              vec2 u = f * f * (3. - 2. * f);
+              return mix(a, b, u.x) + (c - a) * u.y * (1. - u.x) + (d - b) * u.x * u.y;
+            }
+
+            void main(){
+              float center = 1.0 - smoothstep(0.62, 1.0, abs(vAcross * 2.0 - 1.0));
+              float endFade = smoothstep(0.02, 0.16, vFlowT) * (1.0 - smoothstep(0.72, 1.0, vFlowT));
+
+              float n = noise(vWorld.xz * .55 + vec2(uTime * .08, -uTime * .16));
+              float streak = sin(vFlowT * 18.0 - uTime * 4.2 + n * 3.0) * .5 + .5;
+              float foam = smoothstep(.72, .96, streak) * clamp(vPower, 0.0, 1.0);
+
+              // v8: 기존 waterMesh 색감과 최대한 맞춘다. 월류는 본체가 아니라 얇은 보조막이다.
+              vec3 waterBase = vec3(0.035, 0.36, 0.52);
+              vec3 waterLight = vec3(0.16, 0.68, 0.78);
+              vec3 foamCol = vec3(0.88, 0.98, 0.96);
+
+              vec3 col = mix(waterBase, waterLight, 0.28 + vPower * .18 + n * .12);
+              col = mix(col, foamCol, foam * .35);
+
+              float alpha = (0.055 + vPower * 0.11 + foam * 0.12) * center * endFade;
+              gl_FragColor = vec4(col, clamp(alpha, 0.0, 0.30));
+            }
+          `
+      });
+
+      spillMesh = new THREE.Mesh(geo, mat);
+      spillMesh.renderOrder = 6;
+      spillMesh.frustumCulled = false;
+      scene.add(spillMesh);
+    }
+
+    function cellWorldCenterFromIndex(k) {
+      const i = k % GRID;
+      const j = Math.floor(k / GRID);
+      return {
+        i, j,
+        x: (i / (GRID - 1) - .5) * SIZE,
+        z: (j / (GRID - 1) - .5) * SIZE,
+        h: terrain[k]
+      };
+    }
+
+    function pushFlowRibbon(vertices, indices, flowTs, powers, acrosses, centers, width, power) {
+      if (centers.length < 2) return;
+
+      const pts = centers.map(p => new THREE.Vector3(p.x, p.y, p.z));
+      const curve = new THREE.CatmullRomCurve3(pts, false, "centripetal", .58);
+      const sampleCount = Math.max(18, Math.min(48, centers.length * 6));
+      const smoothPts = curve.getPoints(sampleCount);
+      const startIndex = vertices.length / 3;
+
+      for (let n = 0; n < smoothPts.length; n++) {
+        const p = smoothPts[n];
+        const prev = smoothPts[Math.max(0, n - 1)];
+        const next = smoothPts[Math.min(smoothPts.length - 1, n + 1)];
+        let tx = next.x - prev.x;
+        let tz = next.z - prev.z;
+        const len = Math.hypot(tx, tz) || 1;
+        tx /= len;
+        tz /= len;
+        const px = -tz;
+        const pz = tx;
+
+        const t = n / Math.max(1, smoothPts.length - 1);
+        const body = Math.sin(Math.PI * t);
+        const localWidth = width * (0.86 + body * .10);
+        const wave = Math.sin(frameCount * .17 + p.x * .11 + p.z * .08 + t * 6.28) * .006;
+
+        const acrossVals = [0.0, 0.24, 0.50, 0.76, 1.0];
+        const offs = [-0.72, -0.36, 0.0, 0.36, 0.72];
+        for (let m = 0; m < offs.length; m++) {
+          vertices.push(p.x + px * localWidth * offs[m], p.y + wave * (m - 2) * .05, p.z + pz * localWidth * offs[m]);
+          flowTs.push(t);
+          powers.push(power);
+          acrosses.push(acrossVals[m]);
+        }
+      }
+
+      for (let n = 0; n < smoothPts.length - 1; n++) {
+        const rowA = startIndex + n * 5;
+        const rowB = rowA + 5;
+        for (let m = 0; m < 4; m++) {
+          const a = rowA + m;
+          const b = rowA + m + 1;
+          const c = rowB + m;
+          const d = rowB + m + 1;
+          indices.push(a, c, b, b, c, d);
+        }
+      }
+    }
+
+    function buildOvertoppingRibbonGeometry() {
+      // v8: 월류는 긴 리본이 아니라 벽 crest를 넘는 짧은 연결막만 보인다.
+      // 반대편 수위가 crest 근처까지 차면 spillMesh를 숨기고 기존 waterMesh 표면만 남긴다.
+      const vertices = [];
+      const indices = [];
+      const flowTs = [];
+      const powers = [];
+      const acrosses = [];
+
+      const wh = Number(ui.wallHeight.value) || 7;
+      const whVisual = depthToVisual(wh) * .92;
+      const maxRibbons = Math.min(overflowRibbons.length, 360);
+
+      for (let r = 0; r < maxRibbons; r++) {
+        const ev = overflowRibbons[r];
+        if (!ev || ev.q <= .00025) continue;
+
+        const source = cellWorldCenterFromIndex(ev.sourceIndex);
+        const target = cellWorldCenterFromIndex(ev.targetIndex);
+
+        const sourceWaterY = source.h + depthToVisual(water[ev.sourceIndex]) + .10;
+        const targetWaterY = target.h + depthToVisual(water[ev.targetIndex]) + .10;
+
+        let wallX = 0;
+        let wallZ = 0;
+        let crestY = -Infinity;
+
+        if (ev.wallCells && ev.wallCells.length) {
+          for (const wk of ev.wallCells) {
+            const wc = cellWorldCenterFromIndex(wk);
+            wallX += wc.x;
+            wallZ += wc.z;
+            crestY = Math.max(crestY, terrain[wk] + whVisual);
+          }
+          wallX /= ev.wallCells.length;
+          wallZ /= ev.wallCells.length;
+        } else {
+          wallX = (source.x + target.x) * .5;
+          wallZ = (source.z + target.z) * .5;
+          crestY = Math.max(source.h, target.h) + whVisual;
+        }
+
+        // 반대편 물이 crest 근처까지 차면 월류 보조막은 제거한다.
+        // 이때부터는 기존 waterMesh만 보이는 편이 훨씬 자연스럽다.
+        const downstreamSubmerge = smoothstep(crestY - .35, crestY + .65, targetWaterY);
+        const upstreamSubmerge = smoothstep(crestY - .15, crestY + .75, sourceWaterY);
+        const visible = 1.0 - Math.max(downstreamSubmerge, upstreamSubmerge * .55);
+        if (visible <= .08) continue;
+
+        const dx = target.x - source.x;
+        const dz = target.z - source.z;
+        const len = Math.hypot(dx, dz) || 1;
+        const ux = dx / len;
+        const uz = dz / len;
+
+        const headVisual = clamp(depthToVisual(ev.head) * .09, .025, .18);
+        const power = clamp(ev.head / Math.max(1.0, wh * .55), .10, .72) * visible;
+
+        // 넓으면 투명한 판처럼 보이므로 의도적으로 얇게 제한한다.
+        const width = CELL * clamp(.28 + Math.sqrt(ev.q * 18.0) * .10, .30, .62);
+        const crestTop = crestY + .06 + headVisual;
+
+        const centers = [
+          {
+            x: source.x - ux * CELL * .05,
+            z: source.z - uz * CELL * .05,
+            y: Math.max(sourceWaterY, crestTop - .10)
+          },
+          {
+            x: wallX - ux * CELL * .18,
+            z: wallZ - uz * CELL * .18,
+            y: crestTop
+          },
+          {
+            x: wallX + ux * CELL * .18,
+            z: wallZ + uz * CELL * .18,
+            y: crestTop - headVisual * .45
+          },
+          {
+            x: target.x + ux * CELL * .04,
+            z: target.z + uz * CELL * .04,
+            y: Math.max(targetWaterY, crestTop - .24)
+          }
+        ];
+
+        pushFlowRibbon(vertices, indices, flowTs, powers, acrosses, centers, width, power);
+      }
+
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute("position", new THREE.Float32BufferAttribute(vertices, 3));
+      geo.setAttribute("flowT", new THREE.Float32BufferAttribute(flowTs, 1));
+      geo.setAttribute("flowPower", new THREE.Float32BufferAttribute(powers, 1));
+      geo.setAttribute("flowAcross", new THREE.Float32BufferAttribute(acrosses, 1));
+      geo.setIndex(indices);
+      if (vertices.length) geo.computeVertexNormals();
+      return geo;
+    }
+    function updateSpillMesh() {
+      if (!spillMesh) return;
+
+      // v9: 벽 넘는 물줄기 리본은 시각적으로 어색해서 끈다.
+      // 월류는 물리 계산으로만 처리하고, 벽보다 수위가 높아진 순간부터
+      // 기존 waterMesh가 벽 위를 직접 덮는 방식으로 표현한다.
+      spillMesh.visible = false;
+      const old = spillMesh.geometry;
+      spillMesh.geometry = new THREE.BufferGeometry();
+      if (old) old.dispose();
+    }
+
+    /**********************************************************************
+     * 9) 물리/상호작용
+     **********************************************************************/
+    function wallBlocksBrushPath(i0, j0, i1, j1) {
+      let x0 = i0, y0 = j0, x1 = i1, y1 = j1;
+      const dx = Math.abs(x1 - x0), dy = Math.abs(y1 - y0);
+      const sx = x0 < x1 ? 1 : -1;
+      const sy = y0 < y1 ? 1 : -1;
+      let err = dx - dy;
+
+      while (!(x0 === x1 && y0 === y1)) {
+        if (!(x0 === i0 && y0 === j0) && wall[idx(x0, y0)]) return true;
+        const e2 = err * 2;
+        if (e2 > -dy) { err -= dy; x0 += sx; }
+        if (e2 < dx) { err += dx; y0 += sy; }
+        if (x0 < 1 || y0 < 1 || x0 >= GRID - 1 || y0 >= GRID - 1) return true;
+      }
+      return false;
+    }
+
+    function movementCutsWallCorner(i, j, di, dj) {
+      if (di === 0 || dj === 0) return false;
+      return wall[idx(i + di, j)] || wall[idx(i, j + dj)];
+    }
+
+    function addWaterAt(i, j, amount, radius) {
+      for (let dj = -radius; dj <= radius; dj++) {
+        for (let di = -radius; di <= radius; di++) {
+          const ii = i + di, jj = j + dj;
+          if (ii < 1 || jj < 1 || ii >= GRID - 1 || jj >= GRID - 1) continue;
+          const d = Math.sqrt(di * di + dj * dj);
+          if (d > radius + .25) continue;
+          const k = idx(ii, jj);
+          if (wall[k]) continue;
+          if (wallBlocksBrushPath(i, j, ii, jj)) continue;
+          water[k] = Math.min(MAX_WATER_DEPTH * 3, water[k] + amount * (1 - d / (radius + .75)));
+        }
+      }
+    }
+
+    function addSource(i, j) {
+      if (i < 2 || j < 2 || i >= GRID - 2 || j >= GRID - 2) return;
+      const duplicate = sources.some(s => Math.abs(s.i - i) <= 1 && Math.abs(s.j - j) <= 1);
+      if (!duplicate) {
+        sources.push({ i, j });
+        updateSourceMesh();
+      }
+      addWaterAt(i, j, 3.5, 2);
+    }
+
+    function setWallAt(i, j, value) {
+      // 지우기/물 범위용 브러시. 벽 그리기는 drawWallLine()으로 1셀 한 줄만 생성한다.
+      const r = Number(ui.brushRadius.value) || 2;
+      for (let dj = -r; dj <= r; dj++) {
+        for (let di = -r; di <= r; di++) {
+          const ii = i + di, jj = j + dj;
+          if (ii < 1 || jj < 1 || ii >= GRID - 1 || jj >= GRID - 1) continue;
+          if (Math.sqrt(di * di + dj * dj) > r + .15) continue;
+          const k = idx(ii, jj);
+          wall[k] = value ? 1 : 0;
+          if (value) water[k] = 0;
+          else wallCover[k] = 0;
+        }
+      }
+      updateWallMesh();
+      refreshWaterTopology();
+      updateWaterGeometry();
+    }
+
+    function drawWallLine(i0, j0, i1, j1, value) {
+      // Bresenham line: 드래그 경로를 여러 셀 덩어리가 아니라 1셀 두께의 한 줄 벽으로 만든다.
+      let x0 = clamp(Math.round(i0), 1, GRID - 2);
+      let y0 = clamp(Math.round(j0), 1, GRID - 2);
+      const x1 = clamp(Math.round(i1), 1, GRID - 2);
+      const y1 = clamp(Math.round(j1), 1, GRID - 2);
+
+      const dx = Math.abs(x1 - x0);
+      const dy = Math.abs(y1 - y0);
+      const sx = x0 < x1 ? 1 : -1;
+      const sy = y0 < y1 ? 1 : -1;
+      let err = dx - dy;
+
+      while (true) {
+        const k = idx(x0, y0);
+        wall[k] = value ? 1 : 0;
+        if (value) water[k] = 0;
+        else wallCover[k] = 0;
+
+        if (x0 === x1 && y0 === y1) break;
+
+        const e2 = err * 2;
+        if (e2 > -dy) { err -= dy; x0 += sx; }
+        if (e2 < dx) { err += dx; y0 += sy; }
+
+        if (x0 < 1 || y0 < 1 || x0 >= GRID - 1 || y0 >= GRID - 1) break;
+      }
+
+      updateWallMesh();
+      refreshWaterTopology();
+      updateWaterGeometry();
+    }
+
+    function findOverflowTargetAcrossWall(i, j, di, dj, currentSurfaceLevel, wallHeight) {
+      if (di !== 0 && dj !== 0) return null;
+
+      let sawWall = false;
+      let wallSpan = 0;
+      let crest = -Infinity;
+      const wallCells = [];
+      const maxWallScan = 10;
+
+      for (let step = 1; step <= maxWallScan; step++) {
+        const ii = i + di * step;
+        const jj = j + dj * step;
+        if (ii < 1 || jj < 1 || ii >= GRID - 1 || jj >= GRID - 1) return null;
+
+        const k = idx(ii, jj);
+        if (wall[k]) {
+          sawWall = true;
+          wallSpan += 1;
+          wallCells.push(k);
+          crest = Math.max(crest, terrain[k] + wallHeight);
+          continue;
+        }
+
+        if (!sawWall) return null;
+
+        const targetSurfaceLevel = terrain[k] + water[k];
+        const hydraulicThreshold = Math.max(crest, targetSurfaceLevel + .04);
+        const head = currentSurfaceLevel - hydraulicThreshold;
+        if (head <= 0) return null;
+
+        const spanPenalty = 1 / (1 + wallSpan * .70);
+        const q = Math.pow(head, 1.35) * .045 * spanPenalty;
+        return { index: k, q, head, wallCells, crest, wallSpan };
+      }
+
+      return null;
+    }
+
+    function simStep() {
+      const rate = Number(ui.waterRate.value) || .42;
+      const sourceRadius = 2;
+      const wallHeight = Number(ui.wallHeight.value) || 7;
+
+      for (const src of sources) addWaterAt(src.i, src.j, rate, sourceRadius);
+
+      delta.fill(0);
+      spill.fill(0);
+      spillVX.fill(0);
+      spillVZ.fill(0);
+      overflowRibbons.length = 0;
+
+      for (let j = 1; j < GRID - 1; j++) {
+        for (let i = 1; i < GRID - 1; i++) {
+          const k = idx(i, j);
+          if (wall[k]) continue;
+
+          const w = water[k];
+          if (w <= .003) continue;
+
+          const currentLevel = terrain[k] + w;
+          const candidates = [];
+          let scoreSum = 0;
+
+          for (const [di, dj, diagBias] of dirs) {
+            const ii = i + di;
+            const jj = j + dj;
+            const nk = idx(ii, jj);
+
+            if (wall[nk]) {
+              const overflow = findOverflowTargetAcrossWall(i, j, di, dj, currentLevel, wallHeight);
+              if (overflow) {
+                const q = Math.min(w * .42, overflow.q * 1.25);
+                if (q > .00018) {
+                  delta[k] -= q;
+                  delta[overflow.index] += q;
+
+                  // 벽을 넘는 순간을 별도 리본으로 그리지 않고,
+                  // 벽 셀 자체에 시각용 수심을 채워 waterMesh가 벽 위를 덮게 만든다.
+                  if (overflow.wallCells && overflow.wallCells.length) {
+                    const coverDepth = clamp(
+                      Math.max(wallHeight * 1.12, overflow.head + wallHeight * 1.02, water[k] * .72),
+                      0,
+                      MAX_WATER_DEPTH * 4
+                    );
+                    for (const wk of overflow.wallCells) {
+                      wallCover[wk] = Math.max(wallCover[wk], coverDepth);
+                    }
+                  }
+
+                  spill[overflow.index] += q;
+                  spillVX[overflow.index] += di * q;
+                  spillVZ[overflow.index] += dj * q;
+                  overflowRibbons.push({
+                    sourceIndex: k,
+                    targetIndex: overflow.index,
+                    q,
+                    head: overflow.head,
+                    wallCells: overflow.wallCells
+                  });
+                }
+              }
+              continue;
+            }
+
+            if (movementCutsWallCorner(i, j, di, dj)) continue;
+
+            const neighborLevel = terrain[nk] + water[nk];
+            const diff = currentLevel - neighborLevel;
+            if (diff <= .002) continue;
+
+            const slopeBoost = clamp(diff * .10, .02, .36);
+            const shallowLimiter = clamp(w / 4.0, .08, 1.0);
+            const score = Math.pow(diff, 1.22) * diagBias * slopeBoost * shallowLimiter;
+            if (score > 0) {
+              candidates.push([nk, score]);
+              scoreSum += score;
+            }
+          }
+
+          if (scoreSum > 0) {
+            const movable = Math.min(w * .55, scoreSum * .075);
+            for (const [nk, score] of candidates) {
+              const q = movable * (score / scoreSum);
+              delta[k] -= q;
+              delta[nk] += q;
+            }
+          }
+        }
+      }
+
+      for (let k = 0; k < MAX_CELLS; k++) {
+        if (wall[k]) {
+          // 벽 셀은 물리 계산용 water[]에는 참여하지 않는다.
+          // 대신 wallCover[]만 서서히 빠지게 해서 덮임 표현이 급격히 끊기지 않게 한다.
+          water[k] = 0;
+          wallCover[k] *= .992;
+          if (wallCover[k] < .015) wallCover[k] = 0;
+          continue;
+        }
+        water[k] = clamp(water[k] + delta[k], 0, MAX_WATER_DEPTH * 4);
+        water[k] *= .9993;
+        if (water[k] < .0008) water[k] = 0;
+      }
+    }
+
+    function renderDepthAtCell(k) {
+      if (wall[k]) return isWallSubmerged(k) ? wallCover[k] : 0;
+      return water[k];
+    }
+
+    function visualSmoothedDepthAt(i, j) {
+      const k = idx(i, j);
+      const base = renderDepthAtCell(k);
+      if (base <= 0) return 0;
+
+      let sum = base * 2.2;
+      let weight = 2.2;
+      const near = [
+        [1, 0, 1.0], [-1, 0, 1.0], [0, 1, 1.0], [0, -1, 1.0],
+        [1, 1, .55], [1, -1, .55], [-1, 1, .55], [-1, -1, .55]
+      ];
+
+      for (const [di, dj, wgt] of near) {
+        const ii = i + di;
+        const jj = j + dj;
+        if (ii < 1 || jj < 1 || ii >= GRID - 1 || jj >= GRID - 1) continue;
+        if (!wall[k] && movementCutsWallCorner(i, j, di, dj)) continue;
+        const nk = idx(ii, jj);
+        const nd = renderDepthAtCell(nk);
+        if (nd <= 0) continue;
+        sum += nd * wgt;
+        weight += wgt;
+      }
+
+      const s = sum / weight;
+      return base * .62 + s * .38;
+    }
+
+    function updateWaterGeometry() {
+      if (!waterMesh) return;
+
+      let total = 0;
+      let maxDepth = 0;
+
+      for (let j = 0; j < GRID; j++) {
+        for (let i = 0; i < GRID; i++) {
+          const k = idx(i, j);
+          const raw = wall[k] ? wallCover[k] : water[k];
+          const d = raw > 0 ? visualSmoothedDepthAt(i, j) : 0;
+
+          let y = terrain[k] + depthToVisual(d) + .12;
+          if (wall[k] && isWallSubmerged(k)) {
+            // 벽을 덮는 수면은 최소한 crest보다 조금 높게 유지한다.
+            y = Math.max(y, wallCrestVisualHeight(k) + .10);
+          }
+
+          waterPositions[k * 3 + 1] = y;
+          waterDepthAttr[k] = d;
+
+          if (!wall[k]) {
+            total += water[k];
+            if (water[k] > maxDepth) maxDepth = water[k];
+          }
+        }
+      }
+
+      waterMesh.geometry.attributes.position.needsUpdate = true;
+      waterMesh.geometry.attributes.waterDepth.needsUpdate = true;
+      waterMesh.geometry.computeVertexNormals();
+      refreshWaterTopologyBySubmergedWalls();
+      if (frameCount % 6 === 0) updateWallMesh();
+      updateSpillMesh();
+
+      ui.waterStat.textContent = total.toFixed(0);
+      ui.depthStat.textContent = maxDepth.toFixed(2);
+      ui.sourceStat.textContent = String(sources.length);
+      ui.wallStat.textContent = String(wallCount);
+    }
+
+    function resetHydroState() {
+      water.fill(0);
+      wallCover.fill(0);
+      delta.fill(0);
+      spill.fill(0);
+      spillVX.fill(0);
+      spillVZ.fill(0);
+      wall.fill(0);
+      wallVisualSegments.length = 0;
+      wallVisualJoints.clear();
+      sources = [];
+      wallCount = 0;
+      overflowRibbons.length = 0;
+    }
+
+    function rebuildSceneGeometry() {
+      buildTerrainMesh();
+      buildWaterMesh();
+      buildContourLines();
+      buildWallMesh();
+      buildSpillMesh();
+      buildSourceMesh();
+      updateWallMesh();
+      updateWaterGeometry();
+    }
+
+    function clearWaterOnly() {
+      water.fill(0);
+      wallCover.fill(0);
+      delta.fill(0);
+      spill.fill(0);
+      overflowRibbons.length = 0;
+      updateWaterGeometry();
+    }
+
+    function resetAllHydro() {
+      resetHydroState();
+      updateWallMesh();
+      refreshWaterTopology();
+      updateSourceMesh();
+      updateWaterGeometry();
+    }
+
+    function getTerrainIntersection(clientX, clientY) {
+      if (!terrainMesh) return null;
+      const rect = renderer.domElement.getBoundingClientRect();
+      pointerNdc.x = ((clientX - rect.left) / rect.width) * 2 - 1;
+      pointerNdc.y = -((clientY - rect.top) / rect.height) * 2 + 1;
+      raycaster.setFromCamera(pointerNdc, camera);
+      const hit = raycaster.intersectObject(terrainMesh, false)[0];
+      if (!hit) return null;
+
+      const p = hit.point;
+      const i = clamp(Math.round((p.x / SIZE + .5) * (GRID - 1)), 0, GRID - 1);
+      const j = clamp(Math.round((p.z / SIZE + .5) * (GRID - 1)), 0, GRID - 1);
+      return { i, j, point: p };
+    }
+
+    function applyToolAt(clientX, clientY) {
+      const hit = getTerrainIntersection(clientX, clientY);
+      if (!hit) return null;
+
+      if (currentTool === "source") {
+        addSource(hit.i, hit.j);
+      } else if (currentTool === "wall") {
+        if (lastWallCell) drawWallLine(lastWallCell.i, lastWallCell.j, hit.i, hit.j, 1);
+        else drawWallLine(hit.i, hit.j, hit.i, hit.j, 1);
+        lastWallCell = { i: hit.i, j: hit.j };
+      } else if (currentTool === "erase") {
+        setWallAt(hit.i, hit.j, 0);
+      } else if (currentTool === "water") {
+        addWaterAt(hit.i, hit.j, 5.5, Number(ui.brushRadius.value) || 2);
+        updateWaterGeometry();
+      }
+
+      return hit;
+    }
+
+    renderer.domElement.addEventListener("contextmenu", (ev) => ev.preventDefault());
+
+    renderer.domElement.addEventListener("pointerdown", (ev) => {
+      isPointerDown = true;
+      lastPointer.x = ev.clientX;
+      lastPointer.y = ev.clientY;
+      renderer.domElement.setPointerCapture(ev.pointerId);
+
+      const editTool = ["source", "wall", "erase"].includes(currentTool);
+      if (ev.button === 0 && editTool && !ev.shiftKey && !ev.altKey) {
+        pointerMode = "tool";
+        lastWallCell = null;
+        applyToolAt(ev.clientX, ev.clientY);
+      } else if (ev.button === 2 || ev.button === 1 || ev.shiftKey) {
+        pointerMode = "pan";
+        lastWallCell = null;
+      } else {
+        pointerMode = "orbit";
+        lastWallCell = null;
+      }
+    });
+
+    renderer.domElement.addEventListener("pointermove", (ev) => {
+      if (!isPointerDown) return;
+      const dx = ev.clientX - lastPointer.x;
+      const dy = ev.clientY - lastPointer.y;
+
+      if (pointerMode === "tool") {
+        if (["wall", "erase"].includes(currentTool)) applyToolAt(ev.clientX, ev.clientY);
+      } else if (pointerMode === "pan") {
+        panCamera(dx, dy);
+      } else {
+        yaw -= dx * .006;
+        pitch += dy * .005;
+        updateCamera();
+      }
+
+      lastPointer.x = ev.clientX;
+      lastPointer.y = ev.clientY;
+    });
+
+    renderer.domElement.addEventListener("pointerup", (ev) => {
+      isPointerDown = false;
+      pointerMode = "none";
+      lastWallCell = null;
+      try { renderer.domElement.releasePointerCapture(ev.pointerId); } catch (_) {}
+    });
+
+    renderer.domElement.addEventListener("pointercancel", () => {
+      isPointerDown = false;
+      pointerMode = "none";
+      lastWallCell = null;
+    });
+
+    renderer.domElement.addEventListener("wheel", (ev) => {
+      ev.preventDefault();
+      zoomCamera(ev.deltaY > 0 ? 1.08 : .92);
+    }, { passive: false });
+
+    /**********************************************************************
+     * 10) Cesium 영역 선택/샘플링
+     **********************************************************************/
+    let viewer = null;
+    let selection = null;
+    let selectionEntity = null;
+    let centerEntity = null;
+    let terrainSampleSerial = 0;
+
+    function getAreaBounds(center, spanKm) {
+      const latRad = center.lat * Math.PI / 180;
+      const latSpan = spanKm / 111.32;
+      const lonSpan = spanKm / Math.max(1e-4, 111.32 * Math.cos(latRad));
+      return {
+        west: center.lon - lonSpan / 2,
+        east: center.lon + lonSpan / 2,
+        south: center.lat - latSpan / 2,
+        north: center.lat + latSpan / 2,
+        lonSpan,
+        latSpan
+      };
+    }
+
+    function updateSelectionVisual() {
+      if (!viewer || !selection) return;
+
+      const spanKm = Number(ui.areaKm.value) || 8;
+      const b = getAreaBounds(selection, spanKm);
+      selection.bounds = b;
+      selection.spanKm = spanKm;
+
+      const rect = Cesium.Rectangle.fromDegrees(b.west, b.south, b.east, b.north);
+
+      if (!selectionEntity) {
+        selectionEntity = viewer.entities.add({
+          rectangle: {
+            coordinates: rect,
+            material: Cesium.Color.CYAN.withAlpha(.16),
+            outline: true,
+            outlineColor: Cesium.Color.CYAN,
+            height: 0
+          }
+        });
+      } else {
+        selectionEntity.rectangle.coordinates = rect;
+      }
+
+      const pos = Cesium.Cartesian3.fromDegrees(selection.lon, selection.lat, 0);
+      if (!centerEntity) {
+        centerEntity = viewer.entities.add({
+          position: pos,
+          point: {
+            pixelSize: 12,
+            color: Cesium.Color.CYAN,
+            outlineColor: Cesium.Color.WHITE,
+            outlineWidth: 2,
+            disableDepthTestDistance: Number.POSITIVE_INFINITY
+          },
+          label: {
+            text: "선택 중심",
+            font: "12px sans-serif",
+            fillColor: Cesium.Color.WHITE,
+            outlineColor: Cesium.Color.BLACK,
+            outlineWidth: 3,
+            style: Cesium.LabelStyle.FILL_AND_OUTLINE,
+            pixelOffset: new Cesium.Cartesian2(0, -28),
+            disableDepthTestDistance: Number.POSITIVE_INFINITY
+          }
+        });
+      } else {
+        centerEntity.position = pos;
+      }
+
+    }
+
+    function setSelection(lon, lat, fly) {
+      selection = { lon, lat, bounds: null, spanKm: Number(ui.areaKm.value) || 8 };
+      updateSelectionVisual();
+
+      if (fly && viewer) {
+        const b = selection.bounds;
+        viewer.camera.flyTo({
+          destination: Cesium.Rectangle.fromDegrees(b.west, b.south, b.east, b.north),
+          duration: .8
+        });
+      }
+    }
+
+    function pickCesiumAtWindowPosition(position) {
+      if (!viewer) return null;
+      let cartesian = null;
+
+      if (viewer.scene.pickPositionSupported) {
+        try { cartesian = viewer.scene.pickPosition(position); } catch (_) {}
+      }
+
+      if (!cartesian) {
+        const ray = viewer.camera.getPickRay(position);
+        if (ray) cartesian = viewer.scene.globe.pick(ray, viewer.scene);
+      }
+
+      if (!cartesian) {
+        cartesian = viewer.camera.pickEllipsoid(position, viewer.scene.globe.ellipsoid);
+      }
+
+      if (!cartesian) return null;
+
+      const carto = Cesium.Cartographic.fromCartesian(cartesian);
+      return {
+        lon: Cesium.Math.toDegrees(carto.longitude),
+        lat: Cesium.Math.toDegrees(carto.latitude),
+        height: carto.height || 0
+      };
+    }
+
+    async function makeWorldTerrainProvider() {
+      try {
+        if (typeof Cesium.createWorldTerrainAsync === "function") {
+          return await Cesium.createWorldTerrainAsync();
+        }
+      } catch (err) {
+        console.warn("createWorldTerrainAsync failed", err);
+      }
+
+      try {
+        if (typeof Cesium.createWorldTerrain === "function") {
+          return Cesium.createWorldTerrain();
+        }
+      } catch (err) {
+        console.warn("createWorldTerrain failed", err);
+      }
+
+      return new Cesium.EllipsoidTerrainProvider();
+    }
+
+    async function bootCesium() {
+      Cesium.Ion.defaultAccessToken = DEFAULT_CESIUM_TOKEN;
+
+      const terrainProvider = await makeWorldTerrainProvider();
+
+      viewer = new Cesium.Viewer(ui.cesiumContainer, {
+        terrainProvider,
+        animation: false,
+        timeline: false,
+        baseLayerPicker: false,
+        geocoder: false,
+        homeButton: false,
+        sceneModePicker: false,
+        navigationHelpButton: false,
+        fullscreenButton: false,
+        selectionIndicator: false,
+        infoBox: false,
+        shouldAnimate: true
+      });
+
+      viewer.scene.globe.depthTestAgainstTerrain = true;
+      viewer.scene.globe.enableLighting = true;
+
+      viewer.camera.setView({
+        destination: Cesium.Cartesian3.fromDegrees(126.5322, 33.3612, 12000),
+        orientation: {
+          heading: Cesium.Math.toRadians(0),
+          pitch: Cesium.Math.toRadians(-48),
+          roll: 0
+        }
+      });
+
+      const handler = new Cesium.ScreenSpaceEventHandler(viewer.scene.canvas);
+      handler.setInputAction((movement) => {
+        const picked = pickCesiumAtWindowPosition(movement.position);
+        if (!picked) return;
+        setSelection(picked.lon, picked.lat, false);
+        sampleSelectedTerrain();
+      }, Cesium.ScreenSpaceEventType.LEFT_CLICK);
+
+    }
+
+    async function sampleSelectedTerrain() {
+      const serial = ++terrainSampleSerial;
+      if (!viewer || !selection) {
+        return;
+      }
+
+      setLoading(true);
+
+      try {
+        const res = Number(ui.sampleResolution.value) || 128;
+        const b = getAreaBounds(selection, Number(ui.areaKm.value) || 8);
+        const positions = [];
+        const mapIndex = [];
+
+        for (let j = 0; j < GRID; j++) {
+          const jj = Math.round(j / (GRID - 1) * (res - 1));
+          for (let i = 0; i < GRID; i++) {
+            const ii = Math.round(i / (GRID - 1) * (res - 1));
+            mapIndex.push(jj * res + ii);
+          }
+        }
+
+        for (let j = 0; j < res; j++) {
+          const v = j / Math.max(1, res - 1);
+          const lat = lerp(b.north, b.south, v);
+          for (let i = 0; i < res; i++) {
+            const u = i / Math.max(1, res - 1);
+            const lon = lerp(b.west, b.east, u);
+            positions.push(Cesium.Cartographic.fromDegrees(lon, lat));
+          }
+        }
+
+        let updated;
+        try {
+          updated = await Cesium.sampleTerrainMostDetailed(viewer.terrainProvider, positions);
+        } catch (err) {
+          console.warn("sampleTerrainMostDetailed failed; fallback to sampleTerrain", err);
+          const level = Number(ui.terrainLevel.value) || 13;
+          updated = await Cesium.sampleTerrain(viewer.terrainProvider, level, positions);
+        }
+
+        if (serial !== terrainSampleSerial) return;
+        const sampled = new Float32Array(MAX_CELLS);
+        for (let k = 0; k < MAX_CELLS; k++) {
+          const p = updated[mapIndex[k]];
+          sampled[k] = Number.isFinite(p.height) ? p.height : 0;
+        }
+
+        const label = `Cesium ${selection.lon.toFixed(4)}, ${selection.lat.toFixed(4)} / ${Number(ui.areaKm.value).toFixed(1)}km`;
+        applySampledTerrain(sampled, label, Number(ui.terrainScale.value) || 1.25);
+
+      } catch (err) {
+        console.error(err);
+      } finally {
+        setLoading(false);
+      }
+    }
+
+
+    function bindSplitResizer() {
+      if (!ui.splitDivider) return;
+
+      const setLeftWidth = (clientX) => {
+        const minLeft = 280;
+        const minRight = 360;
+        const total = window.innerWidth;
+        const left = clamp(clientX, minLeft, total - minRight);
+        document.documentElement.style.setProperty("--left-pane", `${left}px`);
+        resizeThree();
+        if (viewer && typeof viewer.resize === "function") viewer.resize();
+      };
+
+      ui.splitDivider.addEventListener("pointerdown", (ev) => {
+        ev.preventDefault();
+        ui.splitDivider.setPointerCapture?.(ev.pointerId);
+        document.body.classList.add("resizing");
+
+        const move = (moveEv) => setLeftWidth(moveEv.clientX);
+        const up = () => {
+          document.body.classList.remove("resizing");
+          window.removeEventListener("pointermove", move);
+          window.removeEventListener("pointerup", up);
+          setTimeout(() => {
+            resizeThree();
+            if (viewer && typeof viewer.resize === "function") viewer.resize();
+          }, 0);
+        };
+
+        window.addEventListener("pointermove", move);
+        window.addEventListener("pointerup", up);
+      });
+    }
+
+    /**********************************************************************
+     * 11) UI 이벤트
+     **********************************************************************/
+    function bindUI() {
+      bindSplitResizer();
+
+      ui.areaKm.addEventListener("input", () => {
+        ui.areaKmValue.textContent = `${Number(ui.areaKm.value).toFixed(1)} km`;
+        updateSelectionVisual();
+      });
+
+      ui.terrainScale.addEventListener("input", () => {
+        ui.terrainScaleValue.textContent = `${Number(ui.terrainScale.value).toFixed(2)}x`;
+      });
+
+      ui.flyKoreaBtn.addEventListener("click", () => {
+        if (!viewer) return;
+        viewer.camera.flyTo({
+          destination: Cesium.Cartesian3.fromDegrees(126.5322, 33.3612, 12000),
+          orientation: {
+            heading: Cesium.Math.toRadians(0),
+            pitch: Cesium.Math.toRadians(-48),
+            roll: 0
+          },
+          duration: .8
+        });
+      });
+
+      ui.applyTerrainBtn.addEventListener("click", sampleSelectedTerrain);
+
+      ui.tools.forEach(btn => {
+        btn.addEventListener("click", () => {
+          const nextTool = btn.dataset.tool;
+          currentTool = currentTool === nextTool ? null : nextTool;
+          ui.tools.forEach(b => b.classList.toggle("active", currentTool === b.dataset.tool));
+
+          const label = currentTool
+                  ? btn.textContent.trim()
+                  : "보기 모드";
+        });
+      });
+
+      const bindRangeText = (input, output, suffix = "") => {
+        const update = () => { output.textContent = `${input.value}${suffix}`; };
+        input.addEventListener("input", update);
+        update();
+      };
+
+      bindRangeText(ui.waterRate, ui.waterRateValue);
+      bindRangeText(ui.simSpeed, ui.simSpeedValue);
+      bindRangeText(ui.brushRadius, ui.brushRadiusValue);
+      bindRangeText(ui.wallHeight, ui.wallHeightValue);
+
+      ui.playBtn.addEventListener("click", () => {
+        running = !running;
+        ui.playBtn.textContent = running ? "일시정지" : "재생";
+        ui.modeStat.textContent = running ? "running" : "paused";
+      });
+
+      ui.homeBtn.addEventListener("click", resetCamera);
+      ui.zoomInBtn.addEventListener("click", () => zoomCamera(.84));
+      ui.zoomOutBtn.addEventListener("click", () => zoomCamera(1.18));
+      ui.clearWaterBtn.addEventListener("click", clearWaterOnly);
+      ui.clearSourcesBtn.addEventListener("click", () => {
+        sources = [];
+        updateSourceMesh();
+      });
+      ui.clearWallsBtn.addEventListener("click", () => {
+        wall.fill(0);
+        wallCover.fill(0);
+        wallVisualSegments.length = 0;
+        wallVisualJoints.clear();
+        updateWallMesh();
+        refreshWaterTopology();
+      });
+      ui.resetHydroBtn.addEventListener("click", resetAllHydro);
+      ui.regenBtn.addEventListener("click", () => {
+        generateProceduralTerrain();
+        resetHydroState();
+        rebuildSceneGeometry();
+        resetCamera();
+      });
+
+      ui.collapseSimPanelBtn.addEventListener("click", () => {
+        const hidden = ui.simPanelBody.style.display === "none";
+        ui.simPanelBody.style.display = hidden ? "" : "none";
+        ui.collapseSimPanelBtn.textContent = hidden ? "접기" : "열기";
+      });
+
+      window.addEventListener("resize", () => {
+        resizeThree();
+        if (viewer && typeof viewer.resize === "function") viewer.resize();
+      });
+    }
+
+    /**********************************************************************
+     * 12) animation
+     **********************************************************************/
+    function animate() {
+      requestAnimationFrame(animate);
+      frameCount++;
+
+      const speed = Number(ui.simSpeed.value) || 0;
+      if (running && speed > 0) {
+        const steps = Math.min(16, speed);
+        for (let s = 0; s < steps; s++) simStep();
+      }
+
+      updateWaterGeometry();
+
+      if (waterMesh?.material?.uniforms) waterMesh.material.uniforms.uTime.value = frameCount / 60;
+      if (spillMesh?.material?.uniforms) spillMesh.material.uniforms.uTime.value = frameCount / 60;
+
+      renderer.render(scene, camera);
+    }
+
+    /**********************************************************************
+     * 13) boot
+     **********************************************************************/
+    async function boot() {
+      bindUI();
+
+      generateProceduralTerrain();
+      rebuildSceneGeometry();
+      resizeThree();
+      resetCamera();
+
+      bootCesium().catch((err) => {
+        console.error(err);
+      });
+
+      requestAnimationFrame(animate);
+    }
+
+    boot();
+  })();
+</script>
+</body>
+</html>
