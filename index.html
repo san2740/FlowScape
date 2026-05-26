@@ -1547,75 +1547,55 @@
       updateWallMesh();
     }
 
+    let wallInstanceMesh = null;
+
     function updateWallMesh() {
       if (!wallVisualGroup) return;
 
-      rebuildWallVisualFromGrid();
       clearWallVisualGroupChildren();
 
       const whVisual = wallVisualHeight();
-      const wallWidth = CELL * .82;
-      const wallMat = makeWallVisualMaterial();
-      const topMat = makeWallTopMaterial();
-      wallCount = 0;
+      const wallWidth = CELL * 1.08;
 
-      // 1) 연속 선형 벽 본체
-      for (const seg of wallVisualSegments) {
-        const a = cellToWorld(seg.i0, seg.j0);
-        const b = cellToWorld(seg.i1, seg.j1);
-        const dx = b.x - a.x;
-        const dz = b.z - a.z;
-        const len = Math.hypot(dx, dz);
-        if (len < .001) continue;
+      let count = 0;
+      for (let k = 0; k < MAX_CELLS; k++) {
+        if (wall[k]) count++;
+      }
 
-        // 물에 잠겨도 벽/건물 mesh 높이는 절대 줄이지 않는다.
-        // 침수 표현은 waterMesh가 벽 위로 올라와 덮는 방식으로만 처리한다.
-        const visibleWallHeight = whVisual;
-        const baseY = Math.max(a.y, b.y);
-        const mx = (a.x + b.x) * .5;
-        const mz = (a.z + b.z) * .5;
-        const angle = Math.atan2(dx, dz);
+      wallCount = count;
 
-        const geo = new THREE.BoxGeometry(len + wallWidth * .74, visibleWallHeight, wallWidth);
-        const mesh = new THREE.Mesh(geo, wallMat.clone());
-        mesh.position.set(mx, baseY + visibleWallHeight * .5 + .08, mz);
-        mesh.rotation.y = angle;
-        mesh.castShadow = true;
-        mesh.receiveShadow = true;
-        wallVisualGroup.add(mesh);
+      if (count <= 0) return;
 
-        // 위쪽 얇은 cap을 추가해서 그냥 회색 박스가 아니라 제방/벽 상단처럼 보이게 한다.
-        // 물에 잠겨도 cap 자체는 줄이지 않는다. 물이 위에서 덮어 보이게 둔다.
-        if (visibleWallHeight > .25) {
-          const capH = Math.max(.10, Math.min(.24, visibleWallHeight * .07));
-          const capGeo = new THREE.BoxGeometry(len + wallWidth * .82, capH, wallWidth * 1.08);
-          const cap = new THREE.Mesh(capGeo, topMat.clone());
-          cap.position.set(mx, baseY + visibleWallHeight + capH * .5 + .10, mz);
-          cap.rotation.y = angle;
-          cap.castShadow = true;
-          cap.receiveShadow = true;
-          wallVisualGroup.add(cap);
+      const geo = new THREE.BoxGeometry(wallWidth, whVisual, wallWidth);
+      const mat = makeWallVisualMaterial();
+
+      wallInstanceMesh = new THREE.InstancedMesh(geo, mat, count);
+      wallInstanceMesh.castShadow = false;
+      wallInstanceMesh.receiveShadow = false;
+      wallInstanceMesh.frustumCulled = false;
+
+      let n = 0;
+      for (let j = 1; j < GRID - 1; j++) {
+        for (let i = 1; i < GRID - 1; i++) {
+          const k = idx(i, j);
+          if (!wall[k]) continue;
+
+          const x = (i / (GRID - 1) - .5) * SIZE;
+          const z = (j / (GRID - 1) - .5) * SIZE;
+          const y = terrain[k] + whVisual * .5 + .09;
+
+          tmpObj.position.set(x, y, z);
+          tmpObj.rotation.set(0, 0, 0);
+          tmpObj.scale.set(1, 1, 1);
+          tmpObj.updateMatrix();
+
+          wallInstanceMesh.setMatrixAt(n, tmpObj.matrix);
+          n++;
         }
-
-        wallCount++;
       }
 
-      // 2) 선분이 하나도 없는 단독 셀 또는 꺾이는 연결부를 자연스럽게 메우는 조인트
-      for (const joint of wallVisualJoints.values()) {
-        const p = cellToWorld(joint.i, joint.j);
-        if (!wall[p.k]) continue;
-
-        // 조인트도 잠겼다고 줄이면 건물/벽이 작아지는 것처럼 보인다.
-        const visibleWallHeight = whVisual;
-
-        const jointRadius = wallWidth * .48;
-        const geo = new THREE.CylinderGeometry(jointRadius, jointRadius, visibleWallHeight, 14);
-        const mesh = new THREE.Mesh(geo, wallMat.clone());
-        mesh.position.set(p.x, p.y + visibleWallHeight * .5 + .09, p.z);
-        mesh.castShadow = true;
-        mesh.receiveShadow = true;
-        wallVisualGroup.add(mesh);
-      }
+      wallInstanceMesh.instanceMatrix.needsUpdate = true;
+      wallVisualGroup.add(wallInstanceMesh);
     }
 
     function buildSourceMesh() {
