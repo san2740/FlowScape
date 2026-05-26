@@ -1273,13 +1273,35 @@
 
     function makeWaterIndices() {
       const indices = [];
+
       for (let j = 0; j < GRID - 1; j++) {
         for (let i = 0; i < GRID - 1; i++) {
-          const a = idx(i, j), b = idx(i + 1, j), c = idx(i, j + 1), d = idx(i + 1, j + 1);
-          if (canWaterSurfaceUseCell(a) && canWaterSurfaceUseCell(c) && canWaterSurfaceUseCell(b)) indices.push(a, c, b);
-          if (canWaterSurfaceUseCell(b) && canWaterSurfaceUseCell(c) && canWaterSurfaceUseCell(d)) indices.push(b, c, d);
+          const a = idx(i, j);
+          const b = idx(i + 1, j);
+          const c = idx(i, j + 1);
+          const d = idx(i + 1, j + 1);
+
+          const aw = isWetCell(a);
+          const bw = isWetCell(b);
+          const cw = isWetCell(c);
+          const dw = isWetCell(d);
+
+          const wetCount = (aw ? 1 : 0) + (bw ? 1 : 0) + (cw ? 1 : 0) + (dw ? 1 : 0);
+
+          // 한 quad 안에 물이 하나라도 있으면 삼각형은 만든다.
+          // 가장자리는 shader alpha로 부드럽게 지운다.
+          if (wetCount <= 0) continue;
+
+          if (canWaterSurfaceUseCell(a) && canWaterSurfaceUseCell(c) && canWaterSurfaceUseCell(b)) {
+            indices.push(a, c, b);
+          }
+
+          if (canWaterSurfaceUseCell(b) && canWaterSurfaceUseCell(c) && canWaterSurfaceUseCell(d)) {
+            indices.push(b, c, d);
+          }
         }
       }
+
       return indices;
     }
 
@@ -1362,7 +1384,7 @@
             }
             float fbm(vec2 p){ float v=0.; float a=.5; for(int n=0;n<4;n++){ v+=a*noise(p); p*=2.03; a*=.52; } return v; }
             void main(){
-              if (vDepth < 0.010) discard;
+              if (vDepth < 0.002) discard;
               float d = clamp(vDepth * 0.20, 0.0, 1.0);
               vec2 p = vUv * vec2(18.0, 18.0);
               float flow = sin((vUv.y * 54.0 + vUv.x * 17.0) - uTime * 4.8 + fbm(p + uTime * .20) * 3.0) * .5 + .5;
@@ -1376,8 +1398,8 @@
               col = mix(col, glacial, flow * .20 * (1.0 - d));
               col = mix(col, vec3(.96, 1.0, .95), clamp(foam, 0.0, 1.0));
               col += vec3(.02, .14, .18) * (flow * .16 + ripple * .08);
-              float edge = smoothstep(.010, .080, vDepth);
-              float alpha = edge * clamp(.20 + d * .40 + foam * .30, .18, .74);
+              float edge = smoothstep(.002, .160, vDepth);
+              float alpha = edge * clamp(.12 + d * .42 + foam * .24, .04, .68);
               gl_FragColor = vec4(col, alpha);
             }
           `
@@ -1903,29 +1925,38 @@
       return wall[idx(i + di, j)] || wall[idx(i, j + dj)];
     }
 
-    function addWaterAt(i, j, amount, radius) {
+    function addWaterAt(i, j, amount, radius, maxDepth = MAX_WATER_DEPTH * 3) {
       for (let dj = -radius; dj <= radius; dj++) {
         for (let di = -radius; di <= radius; di++) {
           const ii = i + di, jj = j + dj;
           if (ii < 1 || jj < 1 || ii >= GRID - 1 || jj >= GRID - 1) continue;
+
           const d = Math.sqrt(di * di + dj * dj);
           if (d > radius + .25) continue;
+
           const k = idx(ii, jj);
           if (wall[k]) continue;
           if (wallBlocksBrushPath(i, j, ii, jj)) continue;
-          water[k] = Math.min(MAX_WATER_DEPTH * 3, water[k] + amount * (1 - d / (radius + .75)));
+
+          water[k] = Math.min(
+                  maxDepth,
+                  water[k] + amount * (1 - d / (radius + .75))
+          );
         }
       }
     }
 
     function addSource(i, j) {
       if (i < 2 || j < 2 || i >= GRID - 2 || j >= GRID - 2) return;
+
       const duplicate = sources.some(s => Math.abs(s.i - i) <= 1 && Math.abs(s.j - j) <= 1);
+
       if (!duplicate) {
         sources.push({ i, j });
         updateSourceMesh();
       }
-      addWaterAt(i, j, 3.5, 2);
+
+      addWaterAt(i, j, 3.5, 2, MAX_WATER_DEPTH * 3);
     }
 
     function setWallAt(i, j, value) {
@@ -2023,7 +2054,9 @@
       const sourceRadius = 2;
       const wallHeight = Number(ui.wallHeight.value) || 7;
 
-      for (const src of sources) addWaterAt(src.i, src.j, rate, sourceRadius);
+      for (const src of sources) {
+        addWaterAt(src.i, src.j, rate, sourceRadius, MAX_WATER_DEPTH * 12);
+      }
 
       delta.fill(0);
       spill.fill(0);
@@ -2087,12 +2120,22 @@
             if (movementCutsWallCorner(i, j, di, dj)) continue;
 
             const neighborLevel = terrain[nk] + water[nk];
-            const diff = currentLevel - neighborLevel;
-            if (diff <= .002) continue;
 
-            const slopeBoost = clamp(diff * .10, .02, .36);
-            const shallowLimiter = clamp(w / 4.0, .08, 1.0);
-            const score = Math.pow(diff, 1.22) * diagBias * slopeBoost * shallowLimiter;
+            const surfaceDiff = currentLevel - neighborLevel;
+            const terrainDrop = terrain[k] - terrain[nk];
+
+// 수면 차이만 보지 말고, 실제 지형 하강 방향에 약간의 가중치를 준다.
+            const downhillBias = Math.max(0, terrainDrop) * 0.08;
+
+            const effectiveDiff = surfaceDiff + downhillBias;
+
+// 완전 평지/역경사면은 막고, 지형이 낮은 방향이면 작은 흐름을 허용한다.
+            if (effectiveDiff <= .002) continue;
+
+            const slopeBoost = clamp(effectiveDiff * .10, .025, .42);
+            const shallowLimiter = clamp(w / 3.0, .10, 1.0);
+
+            const score = Math.pow(effectiveDiff, 1.18) * diagBias * slopeBoost * shallowLimiter;
             if (score > 0) {
               candidates.push([nk, score]);
               scoreSum += score;
@@ -2100,7 +2143,7 @@
           }
 
           if (scoreSum > 0) {
-            const movable = Math.min(w * .55, scoreSum * .075);
+            const movable = Math.min(w * .62, scoreSum * .11);
             for (const [nk, score] of candidates) {
               const q = movable * (score / scoreSum);
               delta[k] -= q;
@@ -2119,10 +2162,19 @@
           if (wallCover[k] < .015) wallCover[k] = 0;
           continue;
         }
-        water[k] = clamp(water[k] + delta[k], 0, MAX_WATER_DEPTH * 4);
+        water[k] = clamp(water[k] + delta[k], 0, MAX_WATER_DEPTH * 12);
         water[k] *= .9993;
         if (water[k] < .0008) water[k] = 0;
       }
+    }
+
+    function renderDepthRaw(k) {
+      if (wall[k]) return isWallSubmerged(k) ? wallCover[k] : 0;
+      return water[k];
+    }
+
+    function isWetCell(k) {
+      return renderDepthRaw(k) > 0.005;
     }
 
     function renderDepthAtCell(k) {
@@ -2169,11 +2221,11 @@
 
       // 물이 없는 셀이라도, 주변에 물이 있으면 아주 얕게 보여줌
       if (base <= 0) {
-        const feather = smoothstep(0.3, 2.0, wetNeighborWeight);
-        return s * 0.18 * feather;   // 0.10 ~ 0.25 사이로 조절
+        const feather = smoothstep(0.2, 2.6, wetNeighborWeight);
+        return s * 0.32 * feather;
       }
 
-      return base * 0.55 + s * 0.45;
+      return base * 0.72 + s * 0.28;
     }
 
     function updateWaterGeometry() {
