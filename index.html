@@ -810,8 +810,9 @@
      * 5) Three.js 초기화
      **********************************************************************/
     const scene = new THREE.Scene();
-    scene.background = new THREE.Color(0xd6e6ec);
-    scene.fog = new THREE.Fog(0xd6e6ec, 230, 560);
+    // 실사 지형 미리보기 느낌의 어두운 작업 배경
+    scene.background = new THREE.Color(0x1b1d21);
+    scene.fog = new THREE.Fog(0x1b1d21, 260, 650);
 
     const camera = new THREE.PerspectiveCamera(48, 1, 0.1, 1000);
     const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
@@ -820,24 +821,29 @@
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     ui.threeContainer.appendChild(renderer.domElement);
 
-    const ambient = new THREE.HemisphereLight(0xffffff, 0x93a684, 1.38);
+    const ambient = new THREE.HemisphereLight(0xffffff, 0x435342, 0.95);
     scene.add(ambient);
 
-    const sun = new THREE.DirectionalLight(0xffffff, 2.05);
-    sun.position.set(-65, 90, 42);
+    const sun = new THREE.DirectionalLight(0xffffff, 2.45);
+    sun.position.set(-80, 115, 58);
     sun.castShadow = true;
-    sun.shadow.mapSize.set(1024, 1024);
+    sun.shadow.mapSize.set(2048, 2048);
+    sun.shadow.camera.left = -180;
+    sun.shadow.camera.right = 180;
+    sun.shadow.camera.top = 180;
+    sun.shadow.camera.bottom = -180;
     scene.add(sun);
 
-    const fill = new THREE.DirectionalLight(0x99ddff, .62);
-    fill.position.set(60, 35, -80);
+    const fill = new THREE.DirectionalLight(0x8fb7ff, .42);
+    fill.position.set(80, 42, -90);
     scene.add(fill);
 
     const raycaster = new THREE.Raycaster();
     const pointerNdc = new THREE.Vector2();
     const tmpObj = new THREE.Object3D();
 
-    let terrainMesh, waterMesh, wallMesh, wallVisualGroup, spillMesh, contourLines, sourceMesh;
+    let terrainMesh, terrainSideMesh, waterMesh, wallMesh, wallVisualGroup, spillMesh, contourLines, sourceMesh;
+    let gridHelper, axesHelper, basePlane;
     const wallVisualSegments = [];
     const wallVisualJoints = new Map();
     let terrainPositions, terrainColors, waterPositions, waterDepthAttr;
@@ -995,30 +1001,34 @@
       const maxH = Math.max(18, currentTerrainVisualMax || 42);
       const t = clamp(h / maxH, 0, 1);
 
-      // v7: 높은 곳도 갈색/회색으로 죽이지 않고 초록 계열로 유지한다.
-      // 대신 명도와 채도 차이를 크게 줘서 능선과 골짜기가 분리되어 보이게 한다.
-      const valley = new THREE.Color(0x1f5f3d);
-      const forest = new THREE.Color(0x2f7f47);
-      const vividGrass = new THREE.Color(0x5da947);
-      const meadow = new THREE.Color(0x91c85f);
-      const highGreen = new THREE.Color(0xb7d879);
-      const paleMoss = new THREE.Color(0xd2df92);
+      // 기존 팔레트는 유지하되, 흰색(눈) 계열은 제거하고 전체적으로 더 밝게 조정
+      const deepForest = new THREE.Color(0x2a5235);
+      const forest = new THREE.Color(0x3e7448);
+      const grass = new THREE.Color(0x739a52);
+      const dryGrass = new THREE.Color(0xa39262);
+      const rock = new THREE.Color(0x8c8578);
+      const highRock = new THREE.Color(0xb9b29f);
+      const brightStone = new THREE.Color(0xc9c1ab);
 
       const c = new THREE.Color();
-      if (t < .16) c.copy(valley).lerp(forest, t / .16);
-      else if (t < .38) c.copy(forest).lerp(vividGrass, (t - .16) / .22);
-      else if (t < .60) c.copy(vividGrass).lerp(meadow, (t - .38) / .22);
-      else if (t < .82) c.copy(meadow).lerp(highGreen, (t - .60) / .22);
-      else c.copy(highGreen).lerp(paleMoss, (t - .82) / .18);
+      if (t < .18) c.copy(deepForest).lerp(forest, t / .18);
+      else if (t < .38) c.copy(forest).lerp(grass, (t - .18) / .20);
+      else if (t < .55) c.copy(grass).lerp(dryGrass, (t - .38) / .17);
+      else if (t < .74) c.copy(dryGrass).lerp(rock, (t - .55) / .19);
+      else if (t < .88) c.copy(rock).lerp(highRock, (t - .74) / .14);
+      else c.copy(highRock).lerp(brightStone, (t - .88) / .12);
 
-      // 지형을 읽기 쉽게 경사 음영과 고도 밴딩을 살짝 더한다.
-      const shade = clamp(1.18 - slope * .026, .50, 1.26);
-      const band = 0.965 + 0.035 * Math.sin(t * 42.0);
-      c.multiplyScalar(shade * band);
+      // 경사가 급한 곳은 밝은 바위가 드러나는 느낌만 남기고, 흰색 눈 표현은 제거
+      const steep = smoothstep(3.0, 10.5, slope);
+      c.lerp(new THREE.Color(0x8a8376), steep * .24);
 
-      // 높은 고도는 청록을 아주 조금 섞어 산등성이가 뜨게 한다.
-      const high = smoothstep(.70, 1.0, t);
-      c.lerp(new THREE.Color(0xa8d98a), high * .16);
+      // 전체적으로 살짝 더 밝게
+      c.multiplyScalar(1.10);
+
+      // 지형 음영은 유지하되 너무 어둡지 않게 완화
+      const shade = clamp(1.20 - slope * .018, .72, 1.20);
+      c.multiplyScalar(shade);
+
       return c;
     }
 
@@ -1044,18 +1054,21 @@
           const s = slopeAt(i, j);
           const c = colorForHeight(h, s);
           const maxH = Math.max(18, currentTerrainVisualMax || 42);
-          const contourA = Math.abs((h % 4) - 2);
-          const contourB = Math.abs((h % 12) - 6);
-          const line = contourA > 1.78 ? .66 : (contourB > 5.68 ? .54 : 1.0);
           const p = (y * S + x) * 4;
 
-          // 고도별 미세 노이즈로 실제 지형 texture처럼 색 변화를 준다.
-          const grain = 0.94 + 0.09 * Math.sin(x * 0.071 + y * 0.113) + 0.05 * Math.sin((x + y) * 0.037);
-          const ridge = smoothstep(.58, .96, clamp(h / maxH, 0, 1));
-          c.lerp(new THREE.Color(0x665c48), ridge * .08);
-          img.data[p] = Math.round(clamp(c.r * line * grain, 0, 1) * 255);
-          img.data[p + 1] = Math.round(clamp(c.g * line * grain, 0, 1) * 255);
-          img.data[p + 2] = Math.round(clamp(c.b * line * grain, 0, 1) * 255);
+          // 등고선은 제거하고, 위성사진처럼 불규칙한 숲/바위 패턴만 추가
+          const n1 = Math.sin(x * .057 + y * .091) * Math.cos(x * .031 - y * .047);
+          const n2 = Math.sin((x + y) * .023) + Math.cos((x - y) * .041);
+          const grain = clamp(.96 + n1 * .09 + n2 * .045, .82, 1.22);
+          const ridge = smoothstep(.55, .95, clamp(h / maxH, 0, 1));
+          const steep = smoothstep(3.2, 11.0, s);
+
+          c.lerp(new THREE.Color(0x7d776b), ridge * .08 + steep * .10);
+          c.lerp(new THREE.Color(0x356643), (1.0 - ridge) * Math.max(0, n1) * .07);
+
+          img.data[p] = Math.round(clamp(c.r * grain, 0, 1) * 255);
+          img.data[p + 1] = Math.round(clamp(c.g * grain, 0, 1) * 255);
+          img.data[p + 2] = Math.round(clamp(c.b * grain, 0, 1) * 255);
           img.data[p + 3] = 255;
         }
       }
@@ -1080,6 +1093,93 @@
       });
       if (obj.geometry) obj.geometry.dispose();
       if (obj.material) obj.material.dispose();
+    }
+
+    function buildReferenceStage() {
+      disposeObject(basePlane);
+      disposeObject(gridHelper);
+      disposeObject(axesHelper);
+
+      const baseY = -4.35;
+      const stageSize = SIZE * 1.75;
+
+      const baseGeo = new THREE.PlaneGeometry(stageSize, stageSize);
+      const baseMat = new THREE.MeshStandardMaterial({
+        color: 0x191b1f,
+        roughness: 1.0,
+        metalness: 0.0,
+        side: THREE.DoubleSide
+      });
+      basePlane = new THREE.Mesh(baseGeo, baseMat);
+      basePlane.rotation.x = -Math.PI / 2;
+      basePlane.position.y = baseY - .04;
+      basePlane.receiveShadow = true;
+      scene.add(basePlane);
+
+      gridHelper = new THREE.GridHelper(stageSize, 28, 0x8a8f98, 0x51565f);
+      gridHelper.position.y = baseY;
+      gridHelper.material.transparent = true;
+      gridHelper.material.opacity = .72;
+      scene.add(gridHelper);
+
+      axesHelper = new THREE.AxesHelper(42);
+      axesHelper.position.y = baseY + .08;
+      scene.add(axesHelper);
+    }
+
+    function buildTerrainSideSkirt() {
+      disposeObject(terrainSideMesh);
+
+      const baseY = -4.0;
+      const positions = [];
+      const colors = [];
+      const indices = [];
+
+      function pushVertex(i, j, y) {
+        const k = idx(i, j);
+        const x = (i / (GRID - 1) - .5) * SIZE;
+        const z = (j / (GRID - 1) - .5) * SIZE;
+        positions.push(x, y, z);
+
+        const c = y === baseY ? new THREE.Color(0x111316) : colorForHeight(terrain[k], slopeAt(i, j)).multiplyScalar(.55);
+        colors.push(c.r, c.g, c.b);
+      }
+
+      function addQuad(i1, j1, i2, j2) {
+        const start = positions.length / 3;
+        pushVertex(i1, j1, terrain[idx(i1, j1)]);
+        pushVertex(i2, j2, terrain[idx(i2, j2)]);
+        pushVertex(i1, j1, baseY);
+        pushVertex(i2, j2, baseY);
+        indices.push(start, start + 2, start + 1, start + 1, start + 2, start + 3);
+      }
+
+      for (let i = 0; i < GRID - 1; i++) {
+        addQuad(i, 0, i + 1, 0);
+        addQuad(i + 1, GRID - 1, i, GRID - 1);
+      }
+      for (let j = 0; j < GRID - 1; j++) {
+        addQuad(0, j + 1, 0, j);
+        addQuad(GRID - 1, j, GRID - 1, j + 1);
+      }
+
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
+      geo.setAttribute("color", new THREE.Float32BufferAttribute(colors, 3));
+      geo.setIndex(indices);
+      geo.computeVertexNormals();
+
+      const mat = new THREE.MeshStandardMaterial({
+        vertexColors: true,
+        roughness: .96,
+        metalness: .02,
+        side: THREE.DoubleSide
+      });
+
+      terrainSideMesh = new THREE.Mesh(geo, mat);
+      terrainSideMesh.castShadow = true;
+      terrainSideMesh.receiveShadow = true;
+      scene.add(terrainSideMesh);
     }
 
     function buildTerrainMesh() {
@@ -1136,6 +1236,7 @@
       });
 
       terrainMesh = new THREE.Mesh(geo, mat);
+      terrainMesh.castShadow = true;
       terrainMesh.receiveShadow = true;
       terrainMesh.name = "terrain";
       scene.add(terrainMesh);
@@ -1289,6 +1390,10 @@
 
     function buildContourLines() {
       disposeObject(contourLines);
+
+      // 실사형 지형 모드에서는 등고선을 숨깁니다.
+      // 필요하면 아래 return을 지우면 기존 등고선이 다시 표시됩니다.
+      return;
 
       const positions = [];
       const interval = 4;
@@ -1955,9 +2060,9 @@
                   // 벽 셀 자체에 시각용 수심을 채워 waterMesh가 벽 위를 덮게 만든다.
                   if (overflow.wallCells && overflow.wallCells.length) {
                     const coverDepth = clamp(
-                      Math.max(wallHeight * 1.12, overflow.head + wallHeight * 1.02, water[k] * .72),
-                      0,
-                      MAX_WATER_DEPTH * 4
+                            Math.max(wallHeight * 1.12, overflow.head + wallHeight * 1.02, water[k] * .72),
+                            0,
+                            MAX_WATER_DEPTH * 4
                     );
                     for (const wk of overflow.wallCells) {
                       wallCover[wk] = Math.max(wallCover[wk], coverDepth);
@@ -2128,7 +2233,9 @@
     }
 
     function rebuildSceneGeometry() {
+      buildReferenceStage();
       buildTerrainMesh();
+      buildTerrainSideSkirt();
       buildWaterMesh();
       buildContourLines();
       buildWallMesh();
