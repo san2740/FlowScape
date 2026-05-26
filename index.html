@@ -310,8 +310,8 @@
     }
 
     .buttonRow.three {
-      display: none;
-      grid-template-columns: repeat(3, minmax(0, 1fr));
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 
     .toolGrid {
@@ -628,7 +628,7 @@
           </div>
           <div class="field">
             <label for="simSpeed">속도 <span id="simSpeedValue">3</span></label>
-            <input id="simSpeed" type="range" min="0" max="10" step="1" value="3" />
+            <input id="simSpeed" type="range" min="0" max="3" step="1" value="1" />
           </div>
         </div>
 
@@ -644,15 +644,15 @@
         </div>
 
         <div class="buttonRow three">
-          <button id="playBtn" class="btn primary" type="button">일시정지</button>
-          <button id="homeBtn" class="btn" type="button">원위치</button>
-          <button id="zoomInBtn" class="btn" type="button">확대</button>
-          <button id="zoomOutBtn" class="btn" type="button">축소</button>
-          <button id="clearWaterBtn" class="btn" type="button">물만 제거</button>
-          <button id="clearSourcesBtn" class="btn" type="button">소스 제거</button>
-          <button id="clearWallsBtn" class="btn danger" type="button">벽 제거</button>
-          <button id="resetHydroBtn" class="btn danger" type="button">물 초기화</button>
-          <button id="regenBtn" class="btn warn" type="button">기본 산 재생성</button>
+          <button id="clearWaterBtn" class="btn primary" type="button">물 초기화</button>
+          <button id="clearWallsBtn" class="btn danger" type="button">건물 초기화</button>
+          <button id="playBtn" class="btn primary" type="button" style="display:none">일시정지</button>
+          <button id="homeBtn" class="btn" type="button" style="display:none">원위치</button>
+          <button id="zoomInBtn" class="btn" type="button" style="display:none">확대</button>
+          <button id="zoomOutBtn" class="btn" type="button" style="display:none">축소</button>
+          <button id="clearSourcesBtn" class="btn" type="button" style="display:none">소스 제거</button>
+          <button id="resetHydroBtn" class="btn danger" type="button" style="display:none">전체 초기화</button>
+          <button id="regenBtn" class="btn warn" type="button" style="display:none">기본 산 재생성</button>
         </div>
 
       </div>
@@ -694,6 +694,7 @@
     const CELL = SIZE / (GRID - 1);
     const MAX_CELLS = GRID * GRID;
     const MAX_WATER_DEPTH = 18;
+    const WATER_CAP = MAX_WATER_DEPTH; // 두 번째 Three.js 코드의 heightfield 수심 상한을 사용
 
     const dirs = [
       [1, 0, 1], [-1, 0, 1], [0, 1, 1], [0, -1, 1],
@@ -1925,10 +1926,13 @@
       return wall[idx(i + di, j)] || wall[idx(i, j + dj)];
     }
 
-    function addWaterAt(i, j, amount, radius, maxDepth = MAX_WATER_DEPTH * 3) {
+    function addWaterAt(i, j, amount, radius) {
+      // 두 번째 Three.js 코드 방식: 소스 주입 단계에서 수심을 clamp하지 않는다.
+      // 최종 안정화/clamp는 simStep() 마지막에서 한 번만 처리한다.
       for (let dj = -radius; dj <= radius; dj++) {
         for (let di = -radius; di <= radius; di++) {
-          const ii = i + di, jj = j + dj;
+          const ii = i + di;
+          const jj = j + dj;
           if (ii < 1 || jj < 1 || ii >= GRID - 1 || jj >= GRID - 1) continue;
 
           const d = Math.sqrt(di * di + dj * dj);
@@ -1938,10 +1942,7 @@
           if (wall[k]) continue;
           if (wallBlocksBrushPath(i, j, ii, jj)) continue;
 
-          water[k] = Math.min(
-                  maxDepth,
-                  water[k] + amount * (1 - d / (radius + .75))
-          );
+          water[k] += amount * (1 - d / (radius + .75));
         }
       }
     }
@@ -1956,7 +1957,7 @@
         updateSourceMesh();
       }
 
-      addWaterAt(i, j, 3.5, 2, MAX_WATER_DEPTH * 3);
+      addWaterAt(i, j, 3.5, 2);
     }
 
     function setWallAt(i, j, value) {
@@ -2011,7 +2012,9 @@
       updateWaterGeometry();
     }
 
-    function findOverflowTargetAcrossWall(i, j, di, dj, currentSurfaceLevel, wallHeight) {
+    function findOverflowTargetAcrossWall(i, j, di, dj, currentSurfaceLevel, currentWaterDepth, wallHeight) {
+      // 두 번째 Three.js 코드의 월류 모델을 사용한다.
+      // 벽은 불투수체이고, 직교 방향에서 자유수면이 벽 crest를 넘을 때만 반대편 열린 셀로 넘긴다.
       if (di !== 0 && dj !== 0) return null;
 
       let sawWall = false;
@@ -2037,26 +2040,25 @@
         if (!sawWall) return null;
 
         const targetSurfaceLevel = terrain[k] + water[k];
-        const hydraulicThreshold = Math.max(crest, targetSurfaceLevel + .04);
+        const hydraulicThreshold = Math.max(crest, targetSurfaceLevel + 0.04);
         const head = currentSurfaceLevel - hydraulicThreshold;
         if (head <= 0) return null;
 
-        const spanPenalty = 1 / (1 + wallSpan * .70);
-        const q = Math.pow(head, 1.35) * .045 * spanPenalty;
+        const spanPenalty = 1 / (1 + wallSpan * 0.85);
+        const q = Math.pow(head, 1.5) * 0.022 * spanPenalty;
         return { index: k, q, head, wallCells, crest, wallSpan };
       }
-
       return null;
     }
 
     function simStep() {
+      // 오른쪽 Three.js 전용 코드의 물 생성/흐름 모델로 교체.
+      // 단, 벽 월류 시에는 기존 코드의 wallCover[]를 채워 벽/건물이 물에 묻히게 표현한다.
       const rate = Number(ui.waterRate.value) || .42;
       const sourceRadius = 2;
       const wallHeight = Number(ui.wallHeight.value) || 7;
 
-      for (const src of sources) {
-        addWaterAt(src.i, src.j, rate, sourceRadius, MAX_WATER_DEPTH * 12);
-      }
+      for (const src of sources) addWaterAt(src.i, src.j, rate, sourceRadius);
 
       delta.fill(0);
       spill.fill(0);
@@ -2073,7 +2075,7 @@
           if (w <= .003) continue;
 
           const currentLevel = terrain[k] + w;
-          const candidates = [];
+          const normalCandidates = [];
           let scoreSum = 0;
 
           for (const [di, dj, diagBias] of dirs) {
@@ -2081,73 +2083,76 @@
             const jj = j + dj;
             const nk = idx(ii, jj);
 
-            if (wall[nk]) {
-              const overflow = findOverflowTargetAcrossWall(i, j, di, dj, currentLevel, wallHeight);
-              if (overflow) {
-                const q = Math.min(w * .42, overflow.q * 1.25);
-                if (q > .00018) {
-                  delta[k] -= q;
-                  delta[overflow.index] += q;
-
-                  // 벽을 넘는 순간을 별도 리본으로 그리지 않고,
-                  // 벽 셀 자체에 시각용 수심을 채워 waterMesh가 벽 위를 덮게 만든다.
-                  if (overflow.wallCells && overflow.wallCells.length) {
-                    const coverDepth = clamp(
-                            Math.max(wallHeight * 1.12, overflow.head + wallHeight * 1.02, water[k] * .72),
-                            0,
-                            MAX_WATER_DEPTH * 4
-                    );
-                    for (const wk of overflow.wallCells) {
-                      wallCover[wk] = Math.max(wallCover[wk], coverDepth);
-                    }
-                  }
-
-                  spill[overflow.index] += q;
-                  spillVX[overflow.index] += di * q;
-                  spillVZ[overflow.index] += dj * q;
-                  overflowRibbons.push({
-                    sourceIndex: k,
-                    targetIndex: overflow.index,
-                    q,
-                    head: overflow.head,
-                    wallCells: overflow.wallCells
-                  });
-                }
-              }
-              continue;
-            }
-
+            if (wall[nk]) continue;
             if (movementCutsWallCorner(i, j, di, dj)) continue;
 
             const neighborLevel = terrain[nk] + water[nk];
+            const diff = currentLevel - neighborLevel - .018;
 
-            const surfaceDiff = currentLevel - neighborLevel;
-            const terrainDrop = terrain[k] - terrain[nk];
-
-// 수면 차이만 보지 말고, 실제 지형 하강 방향에 약간의 가중치를 준다.
-            const downhillBias = Math.max(0, terrainDrop) * 0.08;
-
-            const effectiveDiff = surfaceDiff + downhillBias;
-
-// 완전 평지/역경사면은 막고, 지형이 낮은 방향이면 작은 흐름을 허용한다.
-            if (effectiveDiff <= .002) continue;
-
-            const slopeBoost = clamp(effectiveDiff * .10, .025, .42);
-            const shallowLimiter = clamp(w / 3.0, .10, 1.0);
-
-            const score = Math.pow(effectiveDiff, 1.18) * diagBias * slopeBoost * shallowLimiter;
-            if (score > 0) {
-              candidates.push([nk, score]);
+            if (diff > 0) {
+              const score = diff * diagBias;
+              normalCandidates.push([nk, score]);
               scoreSum += score;
             }
           }
 
+          let used = 0;
           if (scoreSum > 0) {
-            const movable = Math.min(w * .62, scoreSum * .11);
-            for (const [nk, score] of candidates) {
-              const q = movable * (score / scoreSum);
+            const maxOut = Math.min(w * .22, scoreSum * .080);
+            for (const [nk, score] of normalCandidates) {
+              const q = maxOut * (score / scoreSum);
               delta[k] -= q;
               delta[nk] += q;
+              used += q;
+            }
+          }
+
+          // 월류는 일반 흐름과 분리해서 계산한다.
+          // 벽 방향으로는 통과하지 않고, 자유수면이 벽 crest를 넘었을 때만 반대편 셀로 물을 보낸다.
+          let remaining = Math.max(0, w - used);
+          if (remaining > .02) {
+            for (const [di, dj] of [[1,0],[-1,0],[0,1],[0,-1]]) {
+              const nk = idx(i + di, j + dj);
+              if (!wall[nk]) continue;
+
+              const overflow = findOverflowTargetAcrossWall(i, j, di, dj, currentLevel, w, wallHeight);
+              if (!overflow) continue;
+
+              const q = Math.min(remaining * .045, overflow.q);
+              if (q <= .0008) continue;
+
+              delta[k] -= q;
+              delta[overflow.index] += q;
+              remaining -= q;
+
+              // 기존 코드 유지 포인트: 벽을 넘는 물을 리본으로만 보이지 않고,
+              // 벽 셀의 시각용 수심을 채워 waterMesh가 벽/건물 위를 직접 덮게 한다.
+              const coverDepth = clamp(
+                      Math.max(wallHeight * 1.12, overflow.head + wallHeight * 1.02, w * .72),
+                      0,
+                      MAX_WATER_DEPTH * 4
+              );
+
+              for (const wk of overflow.wallCells) {
+                wallCover[wk] = Math.max(wallCover[wk], coverDepth);
+                spill[wk] = Math.max(spill[wk], overflow.head);
+                spillVX[wk] = di;
+                spillVZ[wk] = dj;
+              }
+
+              if (overflowRibbons.length < 520) {
+                overflowRibbons.push({
+                  sourceIndex: k,
+                  targetIndex: overflow.index,
+                  wallCells: overflow.wallCells.slice(),
+                  head: overflow.head,
+                  q,
+                  di,
+                  dj
+                });
+              }
+
+              if (remaining <= .02) break;
             }
           }
         }
@@ -2155,16 +2160,12 @@
 
       for (let k = 0; k < MAX_CELLS; k++) {
         if (wall[k]) {
-          // 벽 셀은 물리 계산용 water[]에는 참여하지 않는다.
-          // 대신 wallCover[]만 서서히 빠지게 해서 덮임 표현이 급격히 끊기지 않게 한다.
           water[k] = 0;
           wallCover[k] *= .992;
           if (wallCover[k] < .015) wallCover[k] = 0;
           continue;
         }
-        water[k] = clamp(water[k] + delta[k], 0, MAX_WATER_DEPTH * 12);
-        water[k] *= .9993;
-        if (water[k] < .0008) water[k] = 0;
+        water[k] = Math.max(0, Math.min(WATER_CAP, water[k] + delta[k]));
       }
     }
 
@@ -2302,7 +2303,11 @@
       wallCover.fill(0);
       delta.fill(0);
       spill.fill(0);
+      spillVX.fill(0);
+      spillVZ.fill(0);
       overflowRibbons.length = 0;
+      sources = [];
+      updateSourceMesh();
       updateWaterGeometry();
     }
 
@@ -2754,6 +2759,7 @@
         wallVisualJoints.clear();
         updateWallMesh();
         refreshWaterTopology();
+        updateWaterGeometry();
       });
       ui.resetHydroBtn.addEventListener("click", resetAllHydro);
       ui.regenBtn.addEventListener("click", () => {
