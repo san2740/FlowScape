@@ -2028,29 +2028,47 @@
     function visualSmoothedDepthAt(i, j) {
       const k = idx(i, j);
       const base = renderDepthAtCell(k);
-      if (base <= 0) return 0;
 
-      let sum = base * 2.2;
-      let weight = 2.2;
+      let sum = 0;
+      let weight = 0;
+      let wetNeighborWeight = 0;
+
       const near = [
         [1, 0, 1.0], [-1, 0, 1.0], [0, 1, 1.0], [0, -1, 1.0],
-        [1, 1, .55], [1, -1, .55], [-1, 1, .55], [-1, -1, .55]
+        [1, 1, 0.55], [1, -1, 0.55], [-1, 1, 0.55], [-1, -1, 0.55]
       ];
+
+      if (base > 0) {
+        sum += base * 2.2;
+        weight += 2.2;
+      }
 
       for (const [di, dj, wgt] of near) {
         const ii = i + di;
         const jj = j + dj;
         if (ii < 1 || jj < 1 || ii >= GRID - 1 || jj >= GRID - 1) continue;
         if (!wall[k] && movementCutsWallCorner(i, j, di, dj)) continue;
+
         const nk = idx(ii, jj);
         const nd = renderDepthAtCell(nk);
         if (nd <= 0) continue;
+
         sum += nd * wgt;
         weight += wgt;
+        wetNeighborWeight += wgt;
       }
 
+      if (weight <= 0) return 0;
+
       const s = sum / weight;
-      return base * .62 + s * .38;
+
+      // 물이 없는 셀이라도, 주변에 물이 있으면 아주 얕게 보여줌
+      if (base <= 0) {
+        const feather = smoothstep(0.3, 2.0, wetNeighborWeight);
+        return s * 0.18 * feather;   // 0.10 ~ 0.25 사이로 조절
+      }
+
+      return base * 0.55 + s * 0.45;
     }
 
     function updateWaterGeometry() {
