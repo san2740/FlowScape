@@ -434,31 +434,6 @@
       box-shadow: 0 0 16px var(--cyan);
     }
 
-    .crosshair {
-      position: absolute;
-      left: 50%;
-      top: 50%;
-      width: 20px;
-      height: 20px;
-      margin-left: -10px;
-      margin-top: -10px;
-      z-index: 10;
-      pointer-events: none;
-      border: 1px solid rgba(82,231,255,.7);
-      border-radius: 999px;
-      box-shadow: 0 0 18px rgba(82,231,255,.4);
-    }
-
-    .crosshair::before,
-    .crosshair::after {
-      content: "";
-      position: absolute;
-      background: rgba(82,231,255,.65);
-    }
-
-    .crosshair::before { left: 9px; top: -8px; width: 1px; height: 36px; }
-    .crosshair::after { left: -8px; top: 9px; width: 36px; height: 1px; }
-
     .splitHint {
       display: none;
       position: absolute;
@@ -544,6 +519,237 @@
       }
       .stat:nth-child(n+5) { display: none; }
     }
+
+    .appShell.modalMode {
+      display: block;
+    }
+
+    .appShell.modalMode .pane.left {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+    }
+
+    .appShell.modalMode #cesiumContainer {
+      position: absolute;
+      inset: 0;
+    }
+
+    .appShell.modalMode .splitDivider {
+      display: none;
+    }
+
+    .appShell.modalMode .pane.right {
+      position: absolute;
+      right: 24px;
+      bottom: 24px;
+      width: min(620px, calc(100vw - 48px));
+      height: min(520px, calc(100vh - 48px));
+      z-index: 100;
+      border-radius: 24px;
+      overflow: hidden;
+      box-shadow: 0 28px 90px rgba(0, 0, 0, .42);
+      border: 1px solid rgba(255,255,255,.28);
+      background: #111827;
+    }
+
+    .appShell.modalMode .pane.right::before {
+      position: absolute;
+      left: 16px;
+      top: 12px;
+      z-index: 120;
+      padding: 7px 10px;
+      border-radius: 999px;
+      background: rgba(0,0,0,.55);
+      color: white;
+      font-size: 12px;
+      font-weight: 800;
+      pointer-events: none;
+    }
+
+    .appShell.modalMode .panel.rightPanel {
+      top: 48px;
+      left: 14px;
+      width: min(300px, calc(100% - 28px));
+    }
+
+    .appShell.modalMode .stats {
+      display: none;
+    }
+
+
+    /* ===== Modal mode: movable + resizable Three.js window ===== */
+    .appShell.modalMode {
+      display: block;
+    }
+
+    .appShell.modalMode .pane.left {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+    }
+
+    .appShell.modalMode #cesiumContainer {
+      position: absolute;
+      inset: 0;
+    }
+
+    .appShell.modalMode .splitDivider {
+      display: none;
+    }
+
+    .appShell.modalMode .pane.right {
+      position: absolute;
+      left: var(--modal-left, calc(100vw - 660px));
+      top: var(--modal-top, calc(100vh - 560px));
+      right: auto;
+      bottom: auto;
+      width: var(--modal-width, 620px);
+      height: var(--modal-height, 520px);
+      min-width: 360px;
+      min-height: 300px;
+      z-index: 100;
+      border-radius: 24px;
+      overflow: hidden;
+      box-shadow: 0 28px 90px rgba(0, 0, 0, .42);
+      border: 1px solid rgba(255,255,255,.28);
+      background: #111827;
+    }
+
+    .appShell.modalMode .pane.right::before {
+      content: none;
+    }
+
+    .modalChrome {
+      display: none;
+    }
+
+    .appShell.modalMode .modalChrome {
+      position: absolute;
+      left: 0;
+      top: 0;
+      right: 0;
+      height: 42px;
+      z-index: 160;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      padding: 8px 10px 8px 14px;
+      background: linear-gradient(180deg, rgba(3,7,18,.82), rgba(3,7,18,.42));
+      color: white;
+      cursor: move;
+      user-select: none;
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid rgba(255,255,255,.12);
+    }
+
+    .modalTitle {
+      font-size: 12px;
+      font-weight: 950;
+      letter-spacing: .02em;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      pointer-events: none;
+    }
+
+    .modalActions {
+      display: flex;
+      gap: 6px;
+      align-items: center;
+      cursor: default;
+    }
+
+    .modalIconBtn {
+      width: 30px;
+      height: 26px;
+      border: 1px solid rgba(255,255,255,.18);
+      border-radius: 10px;
+      background: rgba(255,255,255,.12);
+      color: white;
+      cursor: pointer;
+      font-size: 12px;
+      font-weight: 900;
+      line-height: 1;
+      padding: 0;
+    }
+
+    .modalIconBtn:hover {
+      background: rgba(20,184,166,.28);
+      border-color: rgba(45,212,191,.48);
+    }
+
+    .appShell.modalMode #threeContainer {
+      top: 42px;
+    }
+
+    .modalResizeHandle {
+      display: none;
+    }
+
+    .appShell.modalMode .modalResizeHandle {
+      position: absolute;
+      z-index: 170;
+      width: 18px;
+      height: 18px;
+      background: rgba(255,255,255,.16);
+      border: 1px solid rgba(255,255,255,.20);
+      backdrop-filter: blur(8px);
+    }
+
+    .appShell.modalMode .modalResizeHandle.nw {
+      left: 0;
+      top: 0;
+      cursor: nwse-resize;
+      border-radius: 24px 0 8px 0;
+    }
+
+    .appShell.modalMode .modalResizeHandle.ne {
+      right: 0;
+      top: 0;
+      cursor: nesw-resize;
+      border-radius: 0 24px 0 8px;
+    }
+
+    .appShell.modalMode .modalResizeHandle.sw {
+      left: 0;
+      bottom: 0;
+      cursor: nesw-resize;
+      border-radius: 0 8px 0 24px;
+    }
+
+    .appShell.modalMode .modalResizeHandle.se {
+      right: 0;
+      bottom: 0;
+      cursor: nwse-resize;
+      border-radius: 8px 0 24px 0;
+    }
+
+    .appShell.modalMode .panel.rightPanel {
+      top: 56px;
+      left: 14px;
+      width: min(300px, calc(100% - 28px));
+      max-height: calc(100% - 70px);
+    }
+
+    .appShell.modalMode .stats {
+      display: none;
+    }
+
+    body.draggingModal,
+    body.draggingModal * {
+      cursor: move !important;
+      user-select: none !important;
+    }
+
+    body.resizingModal,
+    body.resizingModal * {
+      user-select: none !important;
+    }
+
   </style>
 </head>
 
@@ -558,6 +764,8 @@
           <h1>지형을 클릭해 주세요</h1>
         </div>
       </div>
+
+      <button id="toggleSplitModeBtn" class="btn" type="button">모달 전환</button>
       <div class="panelBody" style="display: none;">
         <div class="sectionTitle">영역</div>
         <div class="row">
@@ -603,6 +811,17 @@
   <div id="splitDivider" class="splitDivider" title="드래그해서 지도와 시뮬레이션 영역 크기를 조절"></div>
 
   <section class="pane right">
+    <div class="modalChrome" id="modalChrome" title="드래그해서 모달 위치 이동">
+      <div class="modalTitle"></div>
+      <div class="modalActions">
+        <button id="modalLargeBtn" class="modalIconBtn" type="button" title="크게/기본 크기 전환">□</button>
+        <button id="modalCloseBtn" class="modalIconBtn" type="button" title="스플릿 화면으로 전환">×</button>
+      </div>
+    </div>
+    <div class="modalResizeHandle nw" data-resize="nw"></div>
+    <div class="modalResizeHandle ne" data-resize="ne"></div>
+    <div class="modalResizeHandle sw" data-resize="sw"></div>
+    <div class="modalResizeHandle se" data-resize="se"></div>
     <div id="threeContainer"></div>
 
 
@@ -735,6 +954,10 @@
       cesiumContainer: $("cesiumContainer"),
       threeContainer: $("threeContainer"),
       splitDivider: $("splitDivider"),
+      modalChrome: $("modalChrome"),
+      modalCloseBtn: $("modalCloseBtn"),
+      modalLargeBtn: $("modalLargeBtn"),
+      modalResizeHandles: Array.from(document.querySelectorAll(".modalResizeHandle")),
 
       areaKm: $("areaKm"),
       areaKmValue: $("areaKmValue"),
@@ -774,6 +997,8 @@
       sourceStat: $("sourceStat"),
       wallStat: $("wallStat"),
       loadingOverlay: $("loadingOverlay"),
+
+      toggleSplitModeBtn: $("toggleSplitModeBtn"),
     };
 
     function setLoading(on) { ui.loadingOverlay.classList.toggle("active", !!on); }
@@ -2665,11 +2890,169 @@
       });
     }
 
+
+    /**********************************************************************
+     * 10-1) Three.js 모달 이동/크기 조절
+     **********************************************************************/
+    let isModalMode = false;
+    let isModalLarge = false;
+    const modalState = {
+      left: Math.max(24, window.innerWidth - 660),
+      top: Math.max(24, window.innerHeight - 560),
+      width: 620,
+      height: 520
+    };
+
+    function clampModalState() {
+      const minW = 360;
+      const minH = 300;
+      const margin = 12;
+      const maxW = Math.max(minW, window.innerWidth - margin * 2);
+      const maxH = Math.max(minH, window.innerHeight - margin * 2);
+
+      modalState.width = clamp(modalState.width, minW, maxW);
+      modalState.height = clamp(modalState.height, minH, maxH);
+      modalState.left = clamp(modalState.left, margin, window.innerWidth - modalState.width - margin);
+      modalState.top = clamp(modalState.top, margin, window.innerHeight - modalState.height - margin);
+    }
+
+    function applyModalState() {
+      clampModalState();
+      document.documentElement.style.setProperty("--modal-left", `${modalState.left}px`);
+      document.documentElement.style.setProperty("--modal-top", `${modalState.top}px`);
+      document.documentElement.style.setProperty("--modal-width", `${modalState.width}px`);
+      document.documentElement.style.setProperty("--modal-height", `${modalState.height}px`);
+
+      requestAnimationFrame(() => {
+        resizeThree();
+        if (viewer && typeof viewer.resize === "function") viewer.resize();
+      });
+    }
+
+    function centerModal(width = modalState.width, height = modalState.height) {
+      modalState.width = width;
+      modalState.height = height;
+      modalState.left = (window.innerWidth - modalState.width) / 2;
+      modalState.top = (window.innerHeight - modalState.height) / 2;
+      applyModalState();
+    }
+
+    function setSplitMode(modal) {
+      isModalMode = modal;
+      document.querySelector(".appShell").classList.toggle("modalMode", modal);
+
+      if (ui.toggleSplitModeBtn) {
+        ui.toggleSplitModeBtn.textContent = modal ? "스플릿 전환" : "모달 전환";
+      }
+
+      if (modal) {
+        applyModalState();
+      } else {
+        setTimeout(() => {
+          resizeThree();
+          if (viewer && typeof viewer.resize === "function") viewer.resize();
+        }, 0);
+      }
+    }
+
+    function bindModalMoveAndResize() {
+      if (!ui.modalChrome) return;
+
+      ui.modalChrome.addEventListener("pointerdown", (ev) => {
+        if (!isModalMode) return;
+        if (ev.target.closest("button")) return;
+        ev.preventDefault();
+
+        const startX = ev.clientX;
+        const startY = ev.clientY;
+        const startLeft = modalState.left;
+        const startTop = modalState.top;
+        document.body.classList.add("draggingModal");
+        ui.modalChrome.setPointerCapture?.(ev.pointerId);
+
+        const move = (moveEv) => {
+          modalState.left = startLeft + moveEv.clientX - startX;
+          modalState.top = startTop + moveEv.clientY - startY;
+          applyModalState();
+        };
+        const up = () => {
+          document.body.classList.remove("draggingModal");
+          window.removeEventListener("pointermove", move);
+          window.removeEventListener("pointerup", up);
+          applyModalState();
+        };
+
+        window.addEventListener("pointermove", move);
+        window.addEventListener("pointerup", up);
+      });
+
+      ui.modalResizeHandles.forEach((handle) => {
+        handle.addEventListener("pointerdown", (ev) => {
+          if (!isModalMode) return;
+          ev.preventDefault();
+          ev.stopPropagation();
+
+          const dir = handle.dataset.resize;
+          const startX = ev.clientX;
+          const startY = ev.clientY;
+          const start = { ...modalState };
+          document.body.classList.add("resizingModal");
+          handle.setPointerCapture?.(ev.pointerId);
+
+          const move = (moveEv) => {
+            const dx = moveEv.clientX - startX;
+            const dy = moveEv.clientY - startY;
+
+            if (dir.includes("e")) modalState.width = start.width + dx;
+            if (dir.includes("s")) modalState.height = start.height + dy;
+            if (dir.includes("w")) {
+              modalState.width = start.width - dx;
+              modalState.left = start.left + dx;
+            }
+            if (dir.includes("n")) {
+              modalState.height = start.height - dy;
+              modalState.top = start.top + dy;
+            }
+
+            applyModalState();
+          };
+          const up = () => {
+            document.body.classList.remove("resizingModal");
+            window.removeEventListener("pointermove", move);
+            window.removeEventListener("pointerup", up);
+            applyModalState();
+          };
+
+          window.addEventListener("pointermove", move);
+          window.addEventListener("pointerup", up);
+        });
+      });
+
+      ui.modalCloseBtn?.addEventListener("click", () => setSplitMode(false));
+      ui.modalLargeBtn?.addEventListener("click", () => {
+        isModalLarge = !isModalLarge;
+        if (isModalLarge) {
+          centerModal(Math.min(980, window.innerWidth - 48), Math.min(720, window.innerHeight - 48));
+        } else {
+          centerModal(620, 520);
+        }
+      });
+
+      window.addEventListener("resize", () => {
+        if (isModalMode) applyModalState();
+      });
+
+      window.addEventListener("keydown", (ev) => {
+        if (ev.key === "Escape" && isModalMode) setSplitMode(false);
+      });
+    }
+
     /**********************************************************************
      * 11) UI 이벤트
      **********************************************************************/
     function bindUI() {
       bindSplitResizer();
+      bindModalMoveAndResize();
 
       ui.areaKm.addEventListener("input", () => {
         ui.areaKmValue.textContent = `${Number(ui.areaKm.value).toFixed(1)} km`;
@@ -2695,6 +3078,10 @@
 
       ui.applyTerrainBtn.addEventListener("click", sampleSelectedTerrain);
 
+      ui.toggleSplitModeBtn?.addEventListener("click", () => {
+        setSplitMode(!isModalMode);
+      });
+
       ui.tools.forEach(btn => {
         btn.addEventListener("click", () => {
           const nextTool = btn.dataset.tool;
@@ -2706,6 +3093,7 @@
                   : "보기 모드";
         });
       });
+
 
       const bindRangeText = (input, output, suffix = "") => {
         const update = () => { output.textContent = `${input.value}${suffix}`; };
