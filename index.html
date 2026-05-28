@@ -1621,11 +1621,12 @@
               vec3 deep = vec3(.012, .17, .40);
               vec3 glacial = vec3(.58, 1.0, .92);
               vec3 col = mix(shallow, deep, d);
-              col = mix(col, glacial, flow * .20 * (1.0 - d));
-              col = mix(col, vec3(.96, 1.0, .95), clamp(foam, 0.0, 1.0));
-              col += vec3(.02, .14, .18) * (flow * .16 + ripple * .08);
+              col = mix(col, glacial, flow * .12 * (1.0 - d));
+              float foamSoft = foam * .32;
+              col = mix(col, vec3(.78, .96, .94), clamp(foamSoft, 0.0, 1.0));
+              col += vec3(.02, .14, .18) * (flow * .12 + ripple * .06);
               float edge = smoothstep(.002, .160, vDepth);
-              float alpha = edge * clamp(.12 + d * .42 + foam * .24, .04, .68);
+              float alpha = edge * clamp(.12 + d * .40 + foamSoft * .14, .04, .62);
               gl_FragColor = vec4(col, alpha);
             }
           `
